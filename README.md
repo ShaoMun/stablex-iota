@@ -1,21 +1,85 @@
 # StableX - Stablecoin Exchange on IOTA
 
-A stablecoin exchange platform built on IOTA using Move language, inspired by Sanctum's infinity pool concept. The exchange addresses fragmented liquidity for regional stablecoins by allowing users to deposit regional stablecoins, earn yield, and receive SBX tokens that can be instantly exchanged for USDC.
+A stablecoin exchange platform built on IOTA using Move language, inspired by Sanctum's infinity pool concept. The exchange addresses fragmented liquidity for regional stablecoins by allowing users to deposit regional stablecoins, earn yield, and receive SBX tokens that can be instantly exchanged for USDC or swapped directly between regional stablecoins.
 
 ## Project Overview
 
 ### Concept
-- **Regional Stablecoins** → LST (Liquid Staking Tokens)
+- **Regional Stablecoins** (XSGD, MYRC, JPYC) → LST (Liquid Staking Tokens)
 - **SBX Token** → INF (Infinity Token)
 - **USDC Reserve Pool** → SOL Reserve Pool
 
-Users deposit regional stablecoins (XSGD, MYRC, JPYC) to earn yield, receive SBX tokens, and can instantly exchange SBX for USDC from the reserve pool or exchange back to regional stablecoins under certain conditions.
+Users deposit regional stablecoins to earn yield, receive SBX tokens (1 SBX = 1 USD), and can:
+- Instantly exchange SBX for USDC from the reserve pool
+- Swap directly between regional stablecoins (A→B, no USD intermediate)
+- Withdraw regional stablecoins with dynamic fees based on pool depth
+
+## Core Features
+
+### 1. Three-Tier Fee Curve (80%/30% Thresholds)
+
+**Tier 1 (≥80% coverage)**: Fixed cheap rate for stablecoins
+- Fee = floor + base (no deviation penalty)
+- Example: 7 bps (0.07%) - optimal for healthy pools
+
+**Tier 2 (30-80% coverage)**: Linear/pricewise fee
+- Fee = floor + base + k * deviation
+- Scales linearly with deviation from target
+- Example: 7-32 bps range
+
+**Tier 3 (<30% coverage)**: Sudden jump - dramatic fee increase
+- Fee = (floor + base) * 10x + exponential term
+- **No cap** - fees can exceed 14%+ to discourage draining
+- Example: 77 bps at 29%, up to 1432 bps at 1%
+
+### 2. Direct A→B Swaps (Infinity Pool Core)
+
+- **No USD intermediate** - direct exchange between regional stablecoins
+- Rate calculation: `rate_A_to_B = price_B / price_A` (both in USD/[CURRENCY] format)
+- Single fee applied based on target asset depth
+- True infinity pool mechanics - all assets in one unified pool
+
+### 3. Balance-Based USDC Allocation
+
+**Balance Definition**: `balance_ratio = USDC / sum(regionals)`
+
+**When Unbalanced** (USDC < regionals, ratio < 1.0):
+- Keep ALL USDC in reserve (no allocation)
+- Pool needs more USDC to reach balance
+
+**When Balanced** (USDC ≥ regionals, ratio ≥ 1.0):
+- Reserve = sum(regionals) (maintain 1:1 ratio)
+- Excess = USDC - sum(regionals)
+- **40% of excess** → Off-chain MM allocation
+- **60% of excess** → Auto-swap to regionals (distributed to unhealthiest vaults)
+
+### 4. Dynamic Per-Currency APY
+
+**When Unbalanced** (USDC < regionals):
+- **USDC**: Higher APY (bonus up to +300 bps) to encourage deposits
+- **Regionals**: Higher APY (bonus up to +200 bps) to encourage deposits
+
+**When Balanced** (USDC ≥ regionals):
+- **USDC**: Base APY + MM returns
+- **Regionals**: Base APY + MM returns + **150 bps bonus** (always higher than USDC)
+
+APY includes:
+- Swap fees (accumulated per currency)
+- MM returns (mocked, 2-8% range, set by admin)
+- Balance compensation (dynamic based on pool health)
+
+### 5. Off-Chain MM Allocation
+
+- **Dynamic allocation**: Only when pool is balanced (has excess)
+- **40% of excess** goes to MM when USDC ≥ sum(regionals)
+- **Random returns**: Mocked returns (2-8% APY range) set by admin periodically
+- Returns factor into per-currency APY calculations
 
 ## Package Information
 
-### Latest Package (with Pyth Integration)
+### Latest Package (with Infinity Pool Features)
 - **Package ID:** `0x2506d448a995c8fd26f3e3a2276409b241fbb4aab54a93256c59670b946d46e0`
-- **Published:** Latest version with Pyth price feed integration
+- **Published:** Latest version with three-tier fee curve, direct swaps, and balance-based allocation
 - **Modules:** `jpyc`, `myrc`, `pyth_adapter`, `sbx_pool`, `usdc`, `xsgd`
 
 ### Previous Packages
@@ -97,11 +161,12 @@ All tokens were transferred to:
 ### Modules
 
 1. **sbx_pool.move** - Core pool logic
-   - Pool state management
-   - User account management
-   - Deposit/withdraw operations
-   - Instant swap functionality
-   - Pyth price integration
+   - Pool state management with balance-based allocation
+   - Three-tier fee curve (80%/30% thresholds)
+   - Direct A→B swaps (no USD intermediate)
+   - Per-currency fee tracking and APY calculation
+   - Dynamic MM allocation (40% of excess)
+   - Deposit/withdraw operations with depth-aware fees
 
 2. **pyth_adapter.move** - Pyth Network integration
    - Price fetching from Pyth
@@ -116,16 +181,34 @@ All tokens were transferred to:
 
 ### Key Features
 
-- **Live Price Integration:** Deposit functions fetch real-time prices from Pyth
-- **Automatic Freshness Validation:** Prices are validated to be no older than 5 minutes
+- **Live Price Integration:** All price-sensitive functions fetch real-time prices from Pyth
+- **Three-Tier Fee Curve:** Cheap fixed rate (≥80%), linear scaling (30-80%), sudden jump (<30%)
+- **Direct Swaps:** A→B swaps without USD intermediate (true infinity pool)
+- **Balance-Based Allocation:** USDC allocation maintains 1:1 ratio with regionals
+- **Dynamic APY:** Per-currency APY based on pool balance and MM returns
+- **Automatic Freshness Validation:** Prices validated to be no older than 5 minutes
 - **USD Value Calculation:** Accurate USD value calculation using live prices
-- **SBX Token Minting:** SBX tokens minted based on USD value of deposits
+- **SBX Token Minting:** SBX tokens minted 1:1 with USD value of deposits
 
 ## Function Signatures
 
-### Deposit Functions (with Live Pyth Prices)
+### Deposit Functions
 
 ```move
+// USDC deposit with balance-based allocation
+public entry fun deposit_usdc(
+    account: &mut Account,
+    pool: &mut Pool,
+    registry: &Registry,
+    amount: u64,
+    xsgd_price_info_obj: &PriceInfoObject,
+    myrc_price_info_obj: &PriceInfoObject,
+    jpyc_price_info_obj: &PriceInfoObject,
+    clock: &Clock,
+    ctx: &TxContext
+)
+
+// Regional stablecoin deposits (with live Pyth prices)
 public entry fun deposit_xsgd(
     account: &mut Account,
     pool: &mut Pool,
@@ -136,52 +219,171 @@ public entry fun deposit_xsgd(
     ctx: &TxContext
 )
 
-public entry fun deposit_myrc(
-    account: &mut Account,
-    pool: &mut Pool,
-    registry: &Registry,
-    myrc_price_info_obj: &PriceInfoObject,
-    amount: u64,
-    clock: &Clock,
-    ctx: &TxContext
-)
-
-public entry fun deposit_jpyc(
-    account: &mut Account,
-    pool: &mut Pool,
-    registry: &Registry,
-    jpyc_price_info_obj: &PriceInfoObject,
-    amount: u64,
-    clock: &Clock,
-    ctx: &TxContext
-)
+public entry fun deposit_myrc(...)
+public entry fun deposit_jpyc(...)
 ```
 
-### Price Management
+### Withdrawal Functions
 
 ```move
-public entry fun refresh_prices_from_pyth(
+// Withdraw USDC (applies three-tier fee curve)
+public entry fun withdraw_usdc(
+    account: &mut Account,
+    pool: &mut Pool,
     registry: &mut Registry,
-    pyth_state: &State,
-    xsgd_price_info_obj: &PriceInfoObject,
-    myrc_price_info_obj: &PriceInfoObject,
-    jpyc_price_info_obj: &PriceInfoObject,
+    sbx_amount: u64,
     clock: &Clock,
     ctx: &TxContext
 )
 
-public entry fun test_pyth_feed(
-    price_info_object: &PriceInfoObject,
+// Withdraw regional stablecoins (applies three-tier fee curve)
+public entry fun withdraw_xsgd(
+    account: &mut Account,
+    pool: &mut Pool,
+    registry: &mut Registry,
+    sbx_amount: u64,
+    xsgd_price_info_obj: &PriceInfoObject,
+    clock: &Clock,
+    ctx: &TxContext
+)
+
+public entry fun withdraw_myrc(...)
+public entry fun withdraw_jpyc(...)
+```
+
+### Swap Functions
+
+```move
+// Direct A→B swap (no USD intermediate)
+public entry fun swap_regional(
+    account: &mut Account,
+    pool: &mut Pool,
+    registry: &mut Registry,
+    amount_in: u64,
+    from_code: u8,  // 0=XSGD, 1=MYRC, 2=JPYC
+    to_code: u8,
+    price_from: &PriceInfoObject,
+    price_to: &PriceInfoObject,
     clock: &Clock,
     ctx: &TxContext
 )
 ```
+
+### Admin Functions
+
+```move
+// Set three-tier fee curve parameters
+public entry fun admin_set_tier_params(
+    registry: &mut Registry,
+    high_coverage_threshold_bps: u64,  // 80%
+    low_coverage_threshold_bps: u64,   // 30%
+    tier2_base_multiplier: u64,        // 10x
+    tier2_exponential_factor: u64,     // 5x
+    ctx: &TxContext
+)
+
+// Set MM returns (mocked, 2-8% range)
+public entry fun admin_set_mm_returns(
+    registry: &mut Registry,
+    usdc_bps: u64,
+    xsgd_bps: u64,
+    myrc_bps: u64,
+    jpyc_bps: u64,
+    ctx: &TxContext
+)
+
+// Set coverage targets
+public entry fun admin_set_targets(
+    registry: &mut Registry,
+    usdc_bps: u64,
+    xsgd_bps: u64,
+    myrc_bps: u64,
+    jpyc_bps: u64,
+    ctx: &TxContext
+)
+
+// Set fee parameters
+public entry fun admin_set_fee_params(
+    registry: &mut Registry,
+    base_fee_bps: u64,
+    depth_fee_k_bps: u64,
+    withdraw_fee_floor_bps: u64,
+    swap_fee_floor_bps: u64,
+    max_fee_bps: u64,
+    ctx: &TxContext
+)
+```
+
+### View Functions
+
+```move
+// Calculate per-currency APY (dynamic based on balance)
+public fun estimated_apy_bps_per_currency(
+    registry: &Registry,
+    pool: &Pool,
+    currency_code: u8,  // 0=USDC, 1=XSGD, 2=MYRC, 3=JPYC
+    fees_7d_mu: u128,
+    avg_tvl_7d_mu: u128,
+    xsgd_price_mu: u64,
+    myrc_price_mu: u64,
+    jpyc_price_mu: u64
+): u64
+
+// Get vault USD values
+public fun vault_usd(
+    pool: &Pool,
+    xsgd_price_mu: u64,
+    myrc_price_mu: u64,
+    jpyc_price_mu: u64
+): (u128, u128, u128, u128, u128)  // (usdc, xsgd, myrc, jpyc, total)
+
+// Get coverage in basis points
+public fun coverage_bps(
+    usdc_mu: u128,
+    xsgd_mu: u128,
+    myrc_mu: u128,
+    jpyc_mu: u128,
+    total_mu: u128
+): (u64, u64, u64, u64)  // (usdc, xsgd, myrc, jpyc)
+```
+
+## Fee Curve Details
+
+### Three-Tier System
+
+**Tier 1 (≥80% coverage)**:
+- Fixed cheap rate: `fee = floor + base`
+- No deviation penalty
+- Optimal for healthy pools
+- Example: 7 bps (0.07%)
+
+**Tier 2 (30-80% coverage)**:
+- Linear/pricewise: `fee = floor + base + k * deviation`
+- Scales with deviation from target
+- Example: 7-32 bps range
+
+**Tier 3 (<30% coverage)**:
+- Sudden jump: `fee = (floor + base) * 10x + exponential_term`
+- No cap - fees can exceed 14%+
+- Example: 77 bps at 29%, 1432 bps at 1%
+
+### Fee Examples
+
+| Coverage | Tier | Fee | Fee % |
+|----------|------|-----|-------|
+| 85% | 1 | 7 bps | 0.07% |
+| 50% | 2 | 22 bps | 0.22% |
+| 30% | 2 | 32 bps | 0.32% |
+| 29% | 3 | 77 bps | 0.77% |
+| 20% | 3 | 327 bps | 3.27% |
+| 10% | 3 | 827 bps | 8.27% |
+| 1% | 3 | 1432 bps | 14.32% |
 
 ## Testing
 
 ### Fuzz Tests
 - Location: `first_package/tests/sbx_pool_fuzz_tests.move`
-- Tests: Deposit calculations, swap fees, reserve ratios, price conversions
+- Tests: Deposit calculations, swap fees, reserve ratios, price conversions, APY calculations
 
 ### On-Chain Testing
 - Package published and ready for testing
@@ -209,13 +411,67 @@ Pyth = "0x23994dd119480ea614f7623520337058dca913cb1bb6e5d8d51c7b067d3ca3bb"
 ✅ **Completed:**
 - Token creation (XSGD, MYRC, JPYC, USDC)
 - Pyth Network integration
-- Live price fetching in deposit functions
+- Live price fetching in all price-sensitive functions
+- Three-tier fee curve (80%/30% thresholds)
+- Direct A→B swaps (no USD intermediate)
+- Balance-based USDC allocation (40/60 split)
+- Dynamic MM allocation (40% of excess)
+- Per-currency APY calculation (balance-based)
+- Per-currency fee tracking
 - Fuzz testing for core logic
 - Package compilation and publishing
 
 ⚠️ **In Progress:**
 - On-chain testing with actual PriceInfoObject references
 - Feed registration verification
+
+## Key Formulas
+
+### Balance Ratio
+```
+balance_ratio = USDC / sum(regionals)
+```
+
+### USDC Allocation
+```
+if balance_ratio < 1.0:
+    reserve = USDC (keep all)
+else:
+    reserve = sum(regionals)
+    excess = USDC - sum(regionals)
+    MM_allocation = excess * 0.4
+    swap_allocation = excess * 0.6 (to unhealthiest regionals)
+```
+
+### Per-Currency APY
+```
+balance_ratio = USDC / sum(regionals)
+
+USDC APY:
+  if unbalanced (ratio < 1.0): base_fee_apy + compensation_bonus (higher than regionals)
+  if balanced (ratio >= 1.0): base_fee_apy + MM_apy
+
+Regional APY:
+  if unbalanced (ratio < 1.0): base_fee_apy + compensation_bonus
+  if balanced (ratio >= 1.0): base_fee_apy + MM_apy + 150_bps_bonus
+```
+
+### Three-Tier Fee Formula
+
+**Tier 1 (≥80%)**:
+```
+fee = floor + base (fixed cheap rate)
+```
+
+**Tier 2 (30-80%)**:
+```
+fee = floor + base + k * (deviation / 10000) (linear/pricewise)
+```
+
+**Tier 3 (<30%)**:
+```
+fee = (floor + base) * tier2_base_multiplier + k * (deviation² * tier2_exponential_factor / threshold) / 10000
+```
 
 ## References
 
@@ -232,4 +488,3 @@ Pyth = "0x23994dd119480ea614f7623520337058dca913cb1bb6e5d8d51c7b067d3ca3bb"
 ## Audit Trail
 
 All package IDs, transaction IDs, and object IDs are documented above for future reference and audit purposes.
-

@@ -171,5 +171,15 @@ module first_package::sbx_pool_fuzz_tests {
         // This is handled by E_ZERO_AMOUNT error in the contract
         // No test needed here as it's a simple assertion check
     }
+
+    #[test]
+    fun test_estimated_apy_bps() {
+        // fees over 7d: 1,000 USD; avg TVL: 100,000 USD
+        let fees_7d_mu: u128 = 1_000_000_000u128; // 1,000 * 1e6
+        let tvl_7d_mu: u128 = 100_000_000_000u128; // 100,000 * 1e6
+        let apy_bps = sbx_pool::estimated_apy_bps(fees_7d_mu, tvl_7d_mu);
+        // APY = (1000/100000)*52 = 0.52 -> 5200 bps
+        assert!(apy_bps == 5200u64, 40);
+    }
 }
 
