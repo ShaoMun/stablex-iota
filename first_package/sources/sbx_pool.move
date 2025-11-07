@@ -1,7 +1,12 @@
 module first_package::sbx_pool {
-    use iota::object::{Self, UID};
+    use iota::object::{Self, UID, ID};
     use iota::tx_context::{Self, TxContext};
     use iota::transfer;
+    use iota::clock::{Self, Clock};
+    use first_package::pyth_adapter;
+    use Pyth::state::{Self, State};
+    use Pyth::price_info::PriceInfoObject;
+    use std::bcs;
 
     const E_ALREADY_INITIALIZED: u64 = 1;
     const E_NOT_ADMIN: u64 = 2;
@@ -154,39 +159,84 @@ module first_package::sbx_pool {
         pool.total_rc_liability = pool.total_rc_liability - amount;
     }
 
-    public entry fun deposit_xsgd(account: &mut Account, pool: &mut Pool, registry: &Registry, amount: u64) {
+    public entry fun deposit_xsgd(
+        account: &mut Account,
+        pool: &mut Pool,
+        registry: &Registry,
+        xsgd_price_info_obj: &PriceInfoObject,
+        amount: u64,
+        clock: &Clock,
+        ctx: &TxContext
+    ) {
         assert!(amount > 0, E_ZERO_AMOUNT);
         assert!(!pool.paused, E_PAUSED);
         assert!(registry.xsgd_whitelisted, E_NOT_WHITELISTED);
-        assert!(registry.xsgd_price_microusd > 0, E_PRICE_NOT_SET);
-        let usd_value_mu = ((amount as u128) * (registry.xsgd_price_microusd as u128)) / 1_000_000u128;
+        
+        // Get live price from Pyth (in micro-USD, 1e6 = $1.00)
+        let price_microusd = pyth_adapter::read_price_microusd(xsgd_price_info_obj, clock);
+        assert!(price_microusd > 0, E_PRICE_NOT_SET);
+        
+        // Calculate USD value: amount (in token units) * price (micro-USD) / 1_000_000
+        // This gives us the USD value in micro-USD, which equals the SBX amount to mint
+        let usd_value_mu = ((amount as u128) * (price_microusd as u128)) / 1_000_000u128;
         let mint_amount = usd_value_mu as u64;
+        
         account.sbx = account.sbx + mint_amount;
         account.rc_deposit = account.rc_deposit + amount;
         pool.total_sbx_supply = pool.total_sbx_supply + mint_amount;
         pool.total_rc_liability = pool.total_rc_liability + amount;
     }
 
-    public entry fun deposit_myrc(account: &mut Account, pool: &mut Pool, registry: &Registry, amount: u64) {
+    public entry fun deposit_myrc(
+        account: &mut Account,
+        pool: &mut Pool,
+        registry: &Registry,
+        myrc_price_info_obj: &PriceInfoObject,
+        amount: u64,
+        clock: &Clock,
+        ctx: &TxContext
+    ) {
         assert!(amount > 0, E_ZERO_AMOUNT);
         assert!(!pool.paused, E_PAUSED);
         assert!(registry.myrc_whitelisted, E_NOT_WHITELISTED);
-        assert!(registry.myrc_price_microusd > 0, E_PRICE_NOT_SET);
-        let usd_value_mu = ((amount as u128) * (registry.myrc_price_microusd as u128)) / 1_000_000u128;
+        
+        // Get live price from Pyth (in micro-USD, 1e6 = $1.00)
+        let price_microusd = pyth_adapter::read_price_microusd(myrc_price_info_obj, clock);
+        assert!(price_microusd > 0, E_PRICE_NOT_SET);
+        
+        // Calculate USD value: amount (in token units) * price (micro-USD) / 1_000_000
+        // This gives us the USD value in micro-USD, which equals the SBX amount to mint
+        let usd_value_mu = ((amount as u128) * (price_microusd as u128)) / 1_000_000u128;
         let mint_amount = usd_value_mu as u64;
+        
         account.sbx = account.sbx + mint_amount;
         account.rc_deposit = account.rc_deposit + amount;
         pool.total_sbx_supply = pool.total_sbx_supply + mint_amount;
         pool.total_rc_liability = pool.total_rc_liability + amount;
     }
 
-    public entry fun deposit_jpyc(account: &mut Account, pool: &mut Pool, registry: &Registry, amount: u64) {
+    public entry fun deposit_jpyc(
+        account: &mut Account,
+        pool: &mut Pool,
+        registry: &Registry,
+        jpyc_price_info_obj: &PriceInfoObject,
+        amount: u64,
+        clock: &Clock,
+        ctx: &TxContext
+    ) {
         assert!(amount > 0, E_ZERO_AMOUNT);
         assert!(!pool.paused, E_PAUSED);
         assert!(registry.jpyc_whitelisted, E_NOT_WHITELISTED);
-        assert!(registry.jpyc_price_microusd > 0, E_PRICE_NOT_SET);
-        let usd_value_mu = ((amount as u128) * (registry.jpyc_price_microusd as u128)) / 1_000_000u128;
+        
+        // Get live price from Pyth (in micro-USD, 1e6 = $1.00)
+        let price_microusd = pyth_adapter::read_price_microusd(jpyc_price_info_obj, clock);
+        assert!(price_microusd > 0, E_PRICE_NOT_SET);
+        
+        // Calculate USD value: amount (in token units) * price (micro-USD) / 1_000_000
+        // This gives us the USD value in micro-USD, which equals the SBX amount to mint
+        let usd_value_mu = ((amount as u128) * (price_microusd as u128)) / 1_000_000u128;
         let mint_amount = usd_value_mu as u64;
+        
         account.sbx = account.sbx + mint_amount;
         account.rc_deposit = account.rc_deposit + amount;
         pool.total_sbx_supply = pool.total_sbx_supply + mint_amount;
@@ -249,33 +299,37 @@ module first_package::sbx_pool {
         (registry.xsgd_price_microusd, registry.myrc_price_microusd, registry.jpyc_price_microusd)
     }
 
-    /// Refresh prices from Pyth Network (placeholder - will be implemented once Pyth API is verified)
-    /// This function will read live prices from Pyth and update the registry
+    /// Refresh prices from Pyth Network
+    /// This function reads live prices from Pyth and updates the registry
+    /// Note: Requires PriceInfoObject IDs to be passed - these can be obtained from State
     public entry fun refresh_prices_from_pyth(
         registry: &mut Registry,
-        _pyth_state: address,
-        _clock: address,
+        pyth_state: &State,
+        xsgd_price_info_obj: &PriceInfoObject,
+        myrc_price_info_obj: &PriceInfoObject,
+        jpyc_price_info_obj: &PriceInfoObject,
+        clock: &Clock,
         ctx: &TxContext
     ) {
         assert!(registry.admin == tx_context::sender(ctx), E_NOT_ADMIN);
-        // TODO: Implement actual Pyth price reading
-        // For now, this is a placeholder to test feed connectivity
-        // Once Pyth API is verified, this will:
-        // 1. Read XSGD price from Pyth feed
-        // 2. Read MYRC price from Pyth feed  
-        // 3. Read JPYC price from Pyth feed
-        // 4. Update registry prices
+        
+        // Read prices from Pyth (will abort if feeds fail or prices are stale)
+        registry.xsgd_price_microusd = pyth_adapter::read_price_microusd(xsgd_price_info_obj, clock);
+        registry.myrc_price_microusd = pyth_adapter::read_price_microusd(myrc_price_info_obj, clock);
+        registry.jpyc_price_microusd = pyth_adapter::read_price_microusd(jpyc_price_info_obj, clock);
     }
 
     /// Test a specific Pyth feed to see if it responds
-    /// feed_id: The price feed ID to test
-    /// Returns: success if feed is accessible
+    /// price_info_object: The PriceInfoObject for the feed to test
+    /// Returns: success if feed is accessible and price is fresh
     public entry fun test_pyth_feed(
-        _pyth_state: address,
-        feed_id: address,
-        _ctx: &TxContext
+        price_info_object: &PriceInfoObject,
+        clock: &Clock,
+        ctx: &TxContext
     ) {
-        // This function will be used to test if a specific feed ID works on IOTA testnet
-        // Placeholder for now - will be implemented once we verify Pyth API
+        // Attempt to read price (will abort if feed fails or price is stale)
+        let _price = pyth_adapter::read_price_microusd(price_info_object, clock);
+        // If we get here, the feed is working and price is fresh
+        // Price is in micro-USD (1e6 = $1.00)
     }
 }
