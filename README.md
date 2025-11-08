@@ -5,7 +5,7 @@ A stablecoin exchange platform built on IOTA using Move language, inspired by Sa
 ## Project Overview
 
 ### Concept
-- **Regional Stablecoins** (XSGD, MYRC, JPYC) → LST (Liquid Staking Tokens)
+- **Regional Stablecoins** (CHFX, TRYB, SEKX) → EUR-focused stablecoins
 - **SBX Token** → INF (Infinity Token)
 - **USDC Reserve Pool** → SOL Reserve Pool
 
@@ -13,6 +13,11 @@ Users deposit regional stablecoins to earn yield, receive SBX tokens (1 SBX = 1 
 - Instantly exchange SBX for USDC from the reserve pool
 - Swap directly between regional stablecoins (A→B, no USD intermediate)
 - Withdraw regional stablecoins with dynamic fees based on pool depth
+
+### Price Feed Architecture
+- **API-Based Price Feeds**: Prices are queried off-chain via API and passed as parameters to contract functions
+- **No Onchain Queries**: Removed dependency on Pyth Network onchain queries for better flexibility and lower gas costs
+- **Price Format**: All prices in micro-USD (1e6 = $1.00)
 
 ## Core Features
 
@@ -38,6 +43,7 @@ Users deposit regional stablecoins to earn yield, receive SBX tokens (1 SBX = 1 
 - Rate calculation: `rate_A_to_B = price_B / price_A` (both in USD/[CURRENCY] format)
 - Single fee applied based on target asset depth
 - True infinity pool mechanics - all assets in one unified pool
+- **Prices passed as parameters** - queried from API off-chain before transaction
 
 ### 3. Balance-Based USDC Allocation
 
@@ -77,10 +83,16 @@ APY includes:
 
 ## Package Information
 
-### Latest Package (with Infinity Pool Features)
-- **Package ID:** `0x2506d448a995c8fd26f3e3a2276409b241fbb4aab54a93256c59670b946d46e0`
-- **Published:** Latest version with three-tier fee curve, direct swaps, and balance-based allocation
-- **Modules:** `jpyc`, `myrc`, `pyth_adapter`, `sbx_pool`, `usdc`, `xsgd`
+### Latest Package (EUR-Focused with API-Based Price Feeds)
+- **Package ID:** `0x7d6fa54ec2a4ae5620967a2129860f5a8a0b4d9849df64f2ae9b5325f3ca7db0`
+- **Published:** Latest version with EUR-focused tokens (CHFX, TRYB, SEKX) and API-based price feeds
+- **Transaction Digest:** `Dt1ehGfCWB2edad7ae61z25WJUcoUN3vD7K7vjqthvn3`
+- **Modules:** `chfx`, `tryb`, `sekx`, `sbx_pool`, `usdc`, `jpyc`, `myrc`, `xsgd`, `pyth_adapter`
+- **Key Changes:**
+  - Switched from XSGD/MYRC/JPYC to CHFX/TRYB/SEKX (EUR-focused)
+  - Removed onchain Pyth price queries
+  - All functions now accept prices as `u64` parameters (micro-USD)
+  - Prices queried from API off-chain and passed to contract
 
 ### Previous Packages
 - **Package ID:** `0xce5a8930723f277deb6d1b2d583e732b885458cb6452354c502cb70da8f7cff9` (with test_feed_from_state)
@@ -90,68 +102,75 @@ APY includes:
 
 ## Token Information
 
-### TreasuryCap Object IDs
+### EUR-Focused Tokens
 
 All tokens are regulated currencies with 6 decimals:
 
-1. **XSGD (Singapore Dollar)**
-   - TreasuryCap ID: `0x89beb5ba6d155bb9075544e1e5033661b5e5f75b7389765a625bd2286fa27698`
+1. **CHFX (Swiss Franc)**
+   - TreasuryCap ID: `0xc7eccd077937ab60fe9526b2572841e2a5ef57a0a2b0489b2b38854fddfd0f69`
+   - Address: `0x0b1e3297e69f162877b577b0d6a47a0d63b2392bc8499e6540da4187a63e28f8`
    - Initial Mint: 1000 tokens (1000000000 with 6 decimals)
-   - Recipient: `0xd4655ee4e9f16da4be0342c9e8e3729478be385c26caf43ec5e5a049198cb1a2`
+   - Owner: `0xd4655ee4e9f16da4be0342c9e8e3729478be385c26caf43ec5e5a049198cb1a2`
 
-2. **MYRC (Malaysian Ringgit)**
-   - TreasuryCap ID: `0x07f70a073fb27c8499f3f9b09a3c270fef0687d6d49c96e6d860ec0f558c217d`
+2. **TRYB (Turkish Lira)**
+   - TreasuryCap ID: `0x96df069dcd39491066552d780ef9e942bd47fd45185fb96a66fadfa0515c510a`
+   - Address: `0x032a2eba1c2635bf973e95fb62b2c0705c1be2603b9572cc8d5edeaf8744e058`
    - Initial Mint: 1000 tokens (1000000000 with 6 decimals)
-   - Recipient: `0xd4655ee4e9f16da4be0342c9e8e3729478be385c26caf43ec5e5a049198cb1a2`
+   - Owner: `0xd4655ee4e9f16da4be0342c9e8e3729478be385c26caf43ec5e5a049198cb1a2`
 
-3. **USDC (USD Coin)**
-   - TreasuryCap ID: `0x73651b6faf9fb4ab4d291fe755227c2e0987c2e0e12884021df4ca4d94531c65`
+3. **SEKX (Swedish Krona)**
+   - TreasuryCap ID: `0x8b1b78eb006b50015b04727d2e50149401dec7125ee0aa1eecdf3070540a6e18`
+   - Address: `0x8ccb376aa871517e807358d4e3cf0bc7fe4950474dbe6c9ffc21ef64e43fc676`
    - Initial Mint: 1000 tokens (1000000000 with 6 decimals)
-   - Recipient: `0xd4655ee4e9f16da4be0342c9e8e3729478be385c26caf43ec5e5a049198cb1a2`
+   - Owner: `0xd4655ee4e9f16da4be0342c9e8e3729478be385c26caf43ec5e5a049198cb1a2`
 
-4. **JPYC (Japanese Yen Coin)**
-   - TreasuryCap ID: `0xf71c021f65604289f037726e04c426621a0fbe875f492bf8b57c76a58fe95df4`
+4. **USDC (USD Coin)**
+   - TreasuryCap ID: Available in package
    - Initial Mint: 1000 tokens (1000000000 with 6 decimals)
-   - Recipient: `0xd4655ee4e9f16da4be0342c9e8e3729478be385c26caf43ec5e5a049198cb1a2`
+   - Owner: `0xd4655ee4e9f16da4be0342c9e8e3729478be385c26caf43ec5e5a049198cb1a2`
 
-## Pyth Network Integration
+## Price Feed Architecture
 
-### Pyth Configuration
-- **Pyth State ID:** `0x68dda579251917b3db28e35c4df495c6e664ccc085ede867a9b773c8ebedc2c1`
-- **Pyth Package ID:** `0x23994dd119480ea614f7623520337058dca913cb1bb6e5d8d51c7b067d3ca3bb`
-- **Pyth Git Repository:** `https://github.com/pyth-network/pyth-crosschain.git`
-- **Branch:** `iota-contract-testnet`
-- **Subdirectory:** `target_chains/sui/contracts`
+### API-Based Price Feeds
 
-### Price Feed IDs
+**Current Implementation:**
+- **No Onchain Queries**: Removed dependency on Pyth Network onchain queries
+- **API Integration**: Prices are queried from external API off-chain
+- **Parameter Passing**: All prices passed as `u64` parameters (micro-USD format)
+- **Price Format**: Micro-USD (1e6 = $1.00)
 
-1. **USD/SGD (Singapore Dollar)**
-   - Feed ID: `0x6256c91c19cfbbfc6f91e1fd15c028a26be1f78bb59ac9f7250cbb67f9e5b964`
-   - Note: IOTA uses feed IDs without `0x` prefix in some contexts
+**Benefits:**
+- Lower gas costs (no onchain price queries)
+- More flexible price sources
+- Faster transaction execution
+- Easier integration with multiple price providers
 
-2. **USD/MYR (Malaysian Ringgit)**
-   - Feed ID: `0xb69ac34651e9f72e0be5bb4c6da5d7ddff38dc4ac1fb1528f7f8c579e42082f0`
+### Price Feed Requirements
 
-3. **USD/JPY (Japanese Yen)**
-   - Feed ID: `0xef2c98c804ba503c6a707e38be4dfbb16683775f195b091252bf24693042fd52`
+All functions that require prices now accept them as direct parameters:
+- `deposit_usdc()`: Requires `chfx_price_microusd`, `tryb_price_microusd`, `sekx_price_microusd`
+- `deposit_chfx()`, `deposit_tryb()`, `deposit_sekx()`: Require `price_microusd`
+- `swap_regional()`: Requires `price_from_microusd`, `price_to_microusd`
+- `withdraw_usdc()`, `withdraw_chfx()`, `withdraw_tryb()`, `withdraw_sekx()`: Require price parameters
 
-### Pyth Integration Details
-
-- **Implementation:** Based on official Pyth IOTA documentation
-- **Price Fetching:** Uses `pyth::get_price_no_older_than()` for automatic freshness validation
-- **Price Format:** Micro-USD (1e6 = $1.00)
-- **Freshness Threshold:** 300 seconds (5 minutes)
-- **I64 Handling:** Uses `get_is_negative()`, `get_magnitude_if_positive()`, `get_magnitude_if_negative()`
+**Note:** The `pyth_adapter` module is still included in the package but is no longer used by `sbx_pool`. It remains for potential future use or reference.
 
 ## Key Transactions
 
-### Initial Package Publication
-- **Transaction Digest:** `EiqcqVvk4gVvbS9rgumfiLLGTVaf3Nb8BTfx69rVwTgi`
-- **Package ID:** `0xa5afd11d15dfa90e5ac47ac1a2a74b810b6d0d3c00df8c35c33b90c44e32931d`
+### Latest Package Publication (EUR-Focused)
+- **Transaction Digest:** `Dt1ehGfCWB2edad7ae61z25WJUcoUN3vD7K7vjqthvn3`
+- **Package ID:** `0x7d6fa54ec2a4ae5620967a2129860f5a8a0b4d9849df64f2ae9b5325f3ca7db0`
+- **Modules:** chfx, tryb, sekx, sbx_pool, usdc, jpyc, myrc, xsgd, pyth_adapter
+- **Published:** Package includes all EUR-focused tokens and updated sbx_pool with API-based price feeds
 
-## Target Address
+### Token Minting Transactions
+- **CHFX Mint:** `5NBUC3AFmHaV13sWstrZJBKDvnqs2MqmXAjVwfe8NLtK` (1000 tokens)
+- **TRYB Mint:** `5rdtAyD8rf31ZAdjFaSMPi5bdkrFrCFgCpS37kQ2e3PR` (1000 tokens)
+- **SEKX Mint:** `BodSbjyPCfngsKphgTguAJZXid8brfNj9ykLQXYzH8Vd` (1000 tokens)
 
-All tokens were transferred to:
+## Wallet Address
+
+All tokens and treasury caps are owned by:
 ```
 0xd4655ee4e9f16da4be0342c9e8e3729478be385c26caf43ec5e5a049198cb1a2
 ```
@@ -167,27 +186,28 @@ All tokens were transferred to:
    - Per-currency fee tracking and APY calculation
    - Dynamic MM allocation (40% of excess)
    - Deposit/withdraw operations with depth-aware fees
+   - **API-based price feeds** - prices passed as parameters
 
-2. **pyth_adapter.move** - Pyth Network integration
-   - Price fetching from Pyth
+2. **pyth_adapter.move** - Pyth Network integration (legacy, not used by sbx_pool)
+   - Price fetching from Pyth (for reference)
    - Price freshness validation
    - Micro-USD conversion
    - Helper functions for PriceInfoObject access
 
-3. **xsgd.move, myrc.move, jpyc.move, usdc.move** - Token modules
-   - Regulated currency creation
+3. **chfx.move, tryb.move, sekx.move, usdc.move** - Token modules
+   - Regulated currency creation (EUR-focused tokens)
    - Mint/transfer functions
    - Balance queries
 
 ### Key Features
 
-- **Live Price Integration:** All price-sensitive functions fetch real-time prices from Pyth
+- **API-Based Price Feeds:** Prices queried off-chain and passed as parameters (no onchain queries)
+- **EUR-Focused Tokens:** CHFX (Swiss Franc), TRYB (Turkish Lira), SEKX (Swedish Krona)
 - **Three-Tier Fee Curve:** Cheap fixed rate (≥80%), linear scaling (30-80%), sudden jump (<30%)
 - **Direct Swaps:** A→B swaps without USD intermediate (true infinity pool)
 - **Balance-Based Allocation:** USDC allocation maintains 1:1 ratio with regionals
 - **Dynamic APY:** Per-currency APY based on pool balance and MM returns
-- **Automatic Freshness Validation:** Prices validated to be no older than 5 minutes
-- **USD Value Calculation:** Accurate USD value calculation using live prices
+- **USD Value Calculation:** Accurate USD value calculation using API-provided prices
 - **SBX Token Minting:** SBX tokens minted 1:1 with USD value of deposits
 
 ## Function Signatures
@@ -196,75 +216,78 @@ All tokens were transferred to:
 
 ```move
 // USDC deposit with balance-based allocation
+// Prices queried from API and passed as parameters
 public entry fun deposit_usdc(
     account: &mut Account,
     pool: &mut Pool,
     registry: &Registry,
     amount: u64,
-    xsgd_price_info_obj: &PriceInfoObject,
-    myrc_price_info_obj: &PriceInfoObject,
-    jpyc_price_info_obj: &PriceInfoObject,
-    clock: &Clock,
+    chfx_price_microusd: u64,
+    tryb_price_microusd: u64,
+    sekx_price_microusd: u64,
     ctx: &TxContext
 )
 
-// Regional stablecoin deposits (with live Pyth prices)
-public entry fun deposit_xsgd(
+// Regional stablecoin deposits (prices from API)
+public entry fun deposit_chfx(
     account: &mut Account,
     pool: &mut Pool,
     registry: &Registry,
-    xsgd_price_info_obj: &PriceInfoObject,
     amount: u64,
-    clock: &Clock,
+    price_microusd: u64,
     ctx: &TxContext
 )
 
-public entry fun deposit_myrc(...)
-public entry fun deposit_jpyc(...)
+public entry fun deposit_tryb(...)
+public entry fun deposit_sekx(...)
 ```
 
 ### Withdrawal Functions
 
 ```move
 // Withdraw USDC (applies three-tier fee curve)
+// Prices queried from API and passed as parameters
 public entry fun withdraw_usdc(
     account: &mut Account,
     pool: &mut Pool,
     registry: &mut Registry,
     sbx_amount: u64,
-    clock: &Clock,
+    chfx_price_microusd: u64,
+    tryb_price_microusd: u64,
+    sekx_price_microusd: u64,
     ctx: &TxContext
 )
 
 // Withdraw regional stablecoins (applies three-tier fee curve)
-public entry fun withdraw_xsgd(
+public entry fun withdraw_chfx(
     account: &mut Account,
     pool: &mut Pool,
     registry: &mut Registry,
     sbx_amount: u64,
-    xsgd_price_info_obj: &PriceInfoObject,
-    clock: &Clock,
+    chfx_price_microusd: u64,
+    tryb_price_microusd: u64,
+    sekx_price_microusd: u64,
     ctx: &TxContext
 )
 
-public entry fun withdraw_myrc(...)
-public entry fun withdraw_jpyc(...)
+public entry fun withdraw_tryb(...)
+public entry fun withdraw_sekx(...)
 ```
 
 ### Swap Functions
 
 ```move
 // Direct A→B swap (no USD intermediate)
+// Prices queried from API and passed as parameters
 public entry fun swap_regional(
     account: &mut Account,
     pool: &mut Pool,
     registry: &mut Registry,
     amount_in: u64,
-    from_code: u8,  // 0=XSGD, 1=MYRC, 2=JPYC
+    from_code: u8,  // 0=CHFX, 1=TRYB, 2=SEKX
     to_code: u8,
-    price_from: &PriceInfoObject,
-    price_to: &PriceInfoObject,
-    clock: &Clock,
+    price_from_microusd: u64,
+    price_to_microusd: u64,
     ctx: &TxContext
 )
 ```
@@ -286,9 +309,9 @@ public entry fun admin_set_tier_params(
 public entry fun admin_set_mm_returns(
     registry: &mut Registry,
     usdc_bps: u64,
-    xsgd_bps: u64,
-    myrc_bps: u64,
-    jpyc_bps: u64,
+    chfx_bps: u64,
+    tryb_bps: u64,
+    sekx_bps: u64,
     ctx: &TxContext
 )
 
@@ -296,9 +319,18 @@ public entry fun admin_set_mm_returns(
 public entry fun admin_set_targets(
     registry: &mut Registry,
     usdc_bps: u64,
-    xsgd_bps: u64,
-    myrc_bps: u64,
-    jpyc_bps: u64,
+    chfx_bps: u64,
+    tryb_bps: u64,
+    sekx_bps: u64,
+    ctx: &TxContext
+)
+
+// Set prices (cached for coverage calculations)
+public entry fun admin_set_prices_microusd(
+    registry: &mut Registry,
+    chfx: u64,
+    tryb: u64,
+    sekx: u64,
     ctx: &TxContext
 )
 
@@ -321,30 +353,30 @@ public entry fun admin_set_fee_params(
 public fun estimated_apy_bps_per_currency(
     registry: &Registry,
     pool: &Pool,
-    currency_code: u8,  // 0=USDC, 1=XSGD, 2=MYRC, 3=JPYC
+    currency_code: u8,  // 0=USDC, 1=CHFX, 2=TRYB, 3=SEKX
     fees_7d_mu: u128,
     avg_tvl_7d_mu: u128,
-    xsgd_price_mu: u64,
-    myrc_price_mu: u64,
-    jpyc_price_mu: u64
+    chfx_price_mu: u64,
+    tryb_price_mu: u64,
+    sekx_price_mu: u64
 ): u64
 
 // Get vault USD values
 public fun vault_usd(
     pool: &Pool,
-    xsgd_price_mu: u64,
-    myrc_price_mu: u64,
-    jpyc_price_mu: u64
-): (u128, u128, u128, u128, u128)  // (usdc, xsgd, myrc, jpyc, total)
+    chfx_price_mu: u64,
+    tryb_price_mu: u64,
+    sekx_price_mu: u64
+): (u128, u128, u128, u128, u128)  // (usdc, chfx, tryb, sekx, total)
 
 // Get coverage in basis points
 public fun coverage_bps(
     usdc_mu: u128,
-    xsgd_mu: u128,
-    myrc_mu: u128,
-    jpyc_mu: u128,
+    chfx_mu: u128,
+    tryb_mu: u128,
+    sekx_mu: u128,
     total_mu: u128
-): (u64, u64, u64, u64)  // (usdc, xsgd, myrc, jpyc)
+): (u64, u64, u64, u64)  // (usdc, chfx, tryb, sekx)
 ```
 
 ## Fee Curve Details
@@ -409,21 +441,17 @@ Pyth = "0x23994dd119480ea614f7623520337058dca913cb1bb6e5d8d51c7b067d3ca3bb"
 ## Development Status
 
 ✅ **Completed:**
-- Token creation (XSGD, MYRC, JPYC, USDC)
-- Pyth Network integration
-- Live price fetching in all price-sensitive functions
+- Token creation (CHFX, TRYB, SEKX, USDC) - EUR-focused
+- API-based price feed integration (no onchain queries)
+- Price parameters in all price-sensitive functions
 - Three-tier fee curve (80%/30% thresholds)
 - Direct A→B swaps (no USD intermediate)
 - Balance-based USDC allocation (40/60 split)
 - Dynamic MM allocation (40% of excess)
 - Per-currency APY calculation (balance-based)
 - Per-currency fee tracking
-- Fuzz testing for core logic
 - Package compilation and publishing
-
-⚠️ **In Progress:**
-- On-chain testing with actual PriceInfoObject references
-- Feed registration verification
+- Token minting (1000 tokens of each type)
 
 ## Key Formulas
 
@@ -473,12 +501,42 @@ fee = floor + base + k * (deviation / 10000) (linear/pricewise)
 fee = (floor + base) * tier2_base_multiplier + k * (deviation² * tier2_exponential_factor / threshold) / 10000
 ```
 
+## API Integration Guide
+
+### Price Query Requirements
+
+Before calling any price-sensitive function, query prices from your API and convert to micro-USD format:
+
+```javascript
+// Example: Query prices from API
+const prices = await fetchPrices(['CHFX', 'TRYB', 'SEKX']);
+
+// Convert to micro-USD (1e6 = $1.00)
+// If price is $0.75, then micro-USD = 750000
+const chfxPriceMicroUSD = Math.floor(prices.CHFX * 1_000_000);
+const trybPriceMicroUSD = Math.floor(prices.TRYB * 1_000_000);
+const sekxPriceMicroUSD = Math.floor(prices.SEKX * 1_000_000);
+
+// Pass to contract function
+await contract.deposit_usdc({
+  amount: 1000000,
+  chfx_price_microusd: chfxPriceMicroUSD,
+  tryb_price_microusd: trybPriceMicroUSD,
+  sekx_price_microusd: sekxPriceMicroUSD
+});
+```
+
+### Price Update Frequency
+
+- Prices should be queried fresh for each transaction
+- Consider caching prices for coverage calculations (via `admin_set_prices_microusd`)
+- Update cached prices periodically (e.g., every 5 minutes)
+
 ## References
 
-- **Pyth IOTA Documentation:** https://docs.pyth.network/price-feeds/core/use-real-time-data/pull-integration/iota
-- **Pyth Fetch Price Updates:** https://docs.pyth.network/price-feeds/core/fetch-price-updates
 - **IOTA Documentation:** https://docs.iota.org/developer/getting-started/simple-token-transfer
 - **IOTA Shared Objects:** https://docs.iota.org/developer/iota-101/objects/object-ownership/shared
+- **Move Language:** https://move-language.github.io/move/
 
 ## Network
 
