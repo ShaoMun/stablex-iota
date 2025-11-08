@@ -56,8 +56,9 @@ Users deposit regional stablecoins to earn yield, receive SBX tokens (1 SBX = 1 
 **When Balanced** (USDC ≥ regionals, ratio ≥ 1.0):
 - Reserve = sum(regionals) (maintain 1:1 ratio)
 - Excess = USDC - sum(regionals)
-- **40% of excess** → Off-chain MM allocation
-- **60% of excess** → Auto-swap to regionals (distributed to unhealthiest vaults)
+- **30% of excess** → Off-chain MM allocation
+- **34% of excess** → USDC
+- **36% of excess** → Auto-swap to regionals (distributed to unhealthiest vaults)
 
 ### 4. Dynamic Per-Currency APY
 
@@ -77,24 +78,25 @@ APY includes:
 ### 5. Off-Chain MM Allocation
 
 - **Dynamic allocation**: Only when pool is balanced (has excess)
-- **40% of excess** goes to MM when USDC ≥ sum(regionals)
+- **30% of excess** goes to MM when USDC ≥ sum(regionals)
 - **Random returns**: Mocked returns (2-8% APY range) set by admin periodically
 - Returns factor into per-currency APY calculations
 
 ## Package Information
 
-### Latest Package (EUR-Focused with API-Based Price Feeds)
-- **Package ID:** `0x7d6fa54ec2a4ae5620967a2129860f5a8a0b4d9849df64f2ae9b5325f3ca7db0`
-- **Published:** Latest version with EUR-focused tokens (CHFX, TRYB, SEKX) and API-based price feeds
-- **Transaction Digest:** `Dt1ehGfCWB2edad7ae61z25WJUcoUN3vD7K7vjqthvn3`
+### Latest Package (EUR-Focused with Updated Allocation: 30/34/36 Split)
+- **Package ID:** `0x1cf62d8fda34ae433ca12bdedcf4834e2a848c5ac4bc55a8c866c85697fc5295`
+- **Published:** Latest version with updated USDC allocation (30% MM, 34% USDC, 36% regionals)
+- **Transaction Digest:** `611riKrwzR62eKCZ8Rhu4egaMDboJPuesKeFJC3kajAm`
 - **Modules:** `chfx`, `tryb`, `sekx`, `sbx_pool`, `usdc`, `jpyc`, `myrc`, `xsgd`, `pyth_adapter`
 - **Key Changes:**
-  - Switched from XSGD/MYRC/JPYC to CHFX/TRYB/SEKX (EUR-focused)
-  - Removed onchain Pyth price queries
-  - All functions now accept prices as `u64` parameters (micro-USD)
+  - Updated excess allocation: 30% to MM, 34% to USDC, 36% to regionals (changed from 40/60 split)
+  - EUR-focused tokens (CHFX, TRYB, SEKX) with API-based price feeds
+  - All functions accept prices as `u64` parameters (micro-USD)
   - Prices queried from API off-chain and passed to contract
 
 ### Previous Packages
+- **Package ID:** `0x7d6fa54ec2a4ae5620967a2129860f5a8a0b4d9849df64f2ae9b5325f3ca7db0` (EUR-focused with 40/60 split)
 - **Package ID:** `0xce5a8930723f277deb6d1b2d583e732b885458cb6452354c502cb70da8f7cff9` (with test_feed_from_state)
 - **Package ID:** `0xca283c3f232d60738aac7003395391846ef0b4e2ec6af1558f5781eec1d9c4ef` (initial Pyth integration)
 - **Package ID:** `0x95f3d3f7bd7b844205c5a71c7fc90e8152f8562817e6406ec3d8cfee2b5bba91` (placeholder implementation)
@@ -157,11 +159,11 @@ All functions that require prices now accept them as direct parameters:
 
 ## Key Transactions
 
-### Latest Package Publication (EUR-Focused)
-- **Transaction Digest:** `Dt1ehGfCWB2edad7ae61z25WJUcoUN3vD7K7vjqthvn3`
-- **Package ID:** `0x7d6fa54ec2a4ae5620967a2129860f5a8a0b4d9849df64f2ae9b5325f3ca7db0`
+### Latest Package Publication (Updated Allocation: 30/34/36 Split)
+- **Transaction Digest:** `611riKrwzR62eKCZ8Rhu4egaMDboJPuesKeFJC3kajAm`
+- **Package ID:** `0x1cf62d8fda34ae433ca12bdedcf4834e2a848c5ac4bc55a8c866c85697fc5295`
 - **Modules:** chfx, tryb, sekx, sbx_pool, usdc, jpyc, myrc, xsgd, pyth_adapter
-- **Published:** Package includes all EUR-focused tokens and updated sbx_pool with API-based price feeds
+- **Published:** Package includes updated USDC allocation (30% MM, 34% USDC, 36% regionals) and EUR-focused tokens with API-based price feeds
 
 ### Token Minting Transactions
 - **CHFX Mint:** `5NBUC3AFmHaV13sWstrZJBKDvnqs2MqmXAjVwfe8NLtK` (1000 tokens)
@@ -184,7 +186,7 @@ All tokens and treasury caps are owned by:
    - Three-tier fee curve (80%/30% thresholds)
    - Direct A→B swaps (no USD intermediate)
    - Per-currency fee tracking and APY calculation
-   - Dynamic MM allocation (40% of excess)
+   - Dynamic MM allocation (30% of excess)
    - Deposit/withdraw operations with depth-aware fees
    - **API-based price feeds** - prices passed as parameters
 
@@ -446,8 +448,8 @@ Pyth = "0x23994dd119480ea614f7623520337058dca913cb1bb6e5d8d51c7b067d3ca3bb"
 - Price parameters in all price-sensitive functions
 - Three-tier fee curve (80%/30% thresholds)
 - Direct A→B swaps (no USD intermediate)
-- Balance-based USDC allocation (40/60 split)
-- Dynamic MM allocation (40% of excess)
+- Balance-based USDC allocation (30/34/36 split)
+- Dynamic MM allocation (30% of excess)
 - Per-currency APY calculation (balance-based)
 - Per-currency fee tracking
 - Package compilation and publishing
@@ -467,8 +469,9 @@ if balance_ratio < 1.0:
 else:
     reserve = sum(regionals)
     excess = USDC - sum(regionals)
-    MM_allocation = excess * 0.4
-    swap_allocation = excess * 0.6 (to unhealthiest regionals)
+    MM_allocation = excess * 0.3
+    usdc_allocation = excess * 0.34
+    swap_allocation = excess * 0.36 (to unhealthiest regionals)
 ```
 
 ### Per-Currency APY

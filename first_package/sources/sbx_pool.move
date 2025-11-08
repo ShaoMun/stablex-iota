@@ -192,7 +192,7 @@ module first_package::sbx_pool {
     }
 
     /// Compute USDC allocation based on balance ratio
-    /// Returns: (usdc_reserve_amount, mm_allocation_amount, chfx_swap_amount, tryb_swap_amount, sekx_swap_amount)
+    /// Returns: (usdc_reserve_amount, mm_allocation_amount, usdc_allocation_amount, chfx_swap_amount, tryb_swap_amount, sekx_swap_amount)
     /// All in micro-USD units
     public fun compute_usdc_allocation(
         pool: &Pool,
@@ -200,7 +200,7 @@ module first_package::sbx_pool {
         chfx_price_mu: u64,
         tryb_price_mu: u64,
         sekx_price_mu: u64
-    ): (u64, u64, u64, u64, u64) {
+    ): (u64, u64, u64, u64, u64, u64) {
         // 1. Calculate current regional values
         let chfx_mu = ((pool.chfx_liability_units as u128) * (chfx_price_mu as u128)) / 1_000_000u128;
         let tryb_mu = ((pool.tryb_liability_units as u128) * (tryb_price_mu as u128)) / 1_000_000u128;
@@ -213,17 +213,20 @@ module first_package::sbx_pool {
         // 3. Check balance ratio
         if (new_usdc_mu <= regionals_sum_mu) {
             // Unbalanced: keep all USDC
-            (new_usdc_mu as u64, 0u64, 0u64, 0u64, 0u64)
+            (new_usdc_mu as u64, 0u64, 0u64, 0u64, 0u64, 0u64)
         } else {
             // Balanced: allocate excess
-            let usdc_reserve = regionals_sum_mu as u64;
+            let usdc_reserve_base = regionals_sum_mu as u64;
             let excess_mu = new_usdc_mu - regionals_sum_mu;
             
-            // 40% of excess → MM
-            let mm_allocation = ((excess_mu * 4u128) / 10u128) as u64;
+            // 30% of excess → MM
+            let mm_allocation = ((excess_mu * 3u128) / 10u128) as u64;
             
-            // 60% of excess → Auto-swap to regionals
-            let swap_total = ((excess_mu * 6u128) / 10u128) as u64;
+            // 34% of excess → USDC
+            let usdc_allocation = ((excess_mu * 34u128) / 100u128) as u64;
+            
+            // 36% of excess → Auto-swap to regionals
+            let swap_total = ((excess_mu * 36u128) / 100u128) as u64;
             
             // Distribute to unhealthiest vaults (inverse health weighting)
             let total_mu = regionals_sum_mu + new_usdc_mu;
@@ -240,7 +243,10 @@ module first_package::sbx_pool {
             let tryb_swap = ((swap_total as u128 * tryb_weight) / total_weight) as u64;
             let sekx_swap = swap_total - chfx_swap - tryb_swap;
             
-            (usdc_reserve, mm_allocation, chfx_swap, tryb_swap, sekx_swap)
+            // USDC reserve = base reserve + USDC allocation
+            let usdc_reserve = usdc_reserve_base + usdc_allocation;
+            
+            (usdc_reserve, mm_allocation, usdc_allocation, chfx_swap, tryb_swap, sekx_swap)
         }
     }
 
@@ -261,7 +267,7 @@ module first_package::sbx_pool {
         assert!(!pool.paused, E_PAUSED);
         
         // Compute allocation
-        let (usdc_reserve, mm_allocation, _chfx_swap, _tryb_swap, _sekx_swap) = compute_usdc_allocation(
+        let (usdc_reserve, mm_allocation, _usdc_allocation, _chfx_swap, _tryb_swap, _sekx_swap) = compute_usdc_allocation(
             pool, amount, chfx_price_microusd, tryb_price_microusd, sekx_price_microusd
         );
         
@@ -270,10 +276,10 @@ module first_package::sbx_pool {
         account.sbx = account.sbx + mint_amount;
         pool.total_sbx_supply = pool.total_sbx_supply + mint_amount;
         
-        // Update USDC reserve (maintains balance with regionals)
+        // Update USDC reserve (maintains balance with regionals + 34% of excess)
         pool.usdc_reserve = usdc_reserve;
         
-        // Update MM reserved amount
+        // Update MM reserved amount (30% of excess)
         pool.mm_reserved_usdc = pool.mm_reserved_usdc + mm_allocation;
         
         // Note: Auto-swap amounts are advisory; actual swaps happen via market incentives (fees)
