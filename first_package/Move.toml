@@ -3,8 +3,6 @@ name = "first_package"
 edition = "2024"
 
 [dependencies]
-Pyth = { git = "https://github.com/pyth-network/pyth-crosschain.git", subdir = "target_chains/sui/contracts", rev = "iota-contract-testnet" }
 
 [addresses]
 first_package = "0x0"
-Pyth = "0x23994dd119480ea614f7623520337058dca913cb1bb6e5d8d51c7b067d3ca3bb"

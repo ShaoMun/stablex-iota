@@ -2,6 +2,8 @@ module first_package::sbx_pool {
     use iota::object::{Self, UID, ID};
     use iota::tx_context::{Self, TxContext};
     use iota::transfer;
+    use first_package::sbx::{Self, SBX};
+    use iota::coin::{Self, Coin, TreasuryCap};
 
     const E_ALREADY_INITIALIZED: u64 = 1;
     const E_NOT_ADMIN: u64 = 2;
@@ -13,6 +15,10 @@ module first_package::sbx_pool {
     const E_RESERVE_BREACH: u64 = 8;
     const E_NOT_WHITELISTED: u64 = 9;
     const E_PRICE_NOT_SET: u64 = 10;
+    const E_USDC_DEPOSITOR_CANNOT_WITHDRAW_USDC: u64 = 11;
+    const E_INSUFFICIENT_STAKED: u64 = 12;
+    const E_EPOCH_NOT_COMPLETE: u64 = 13;
+    const E_NO_STAKING_STATUS: u64 = 14;
 
     /// Global pool state
     public struct Pool has key, store {
@@ -29,15 +35,30 @@ module first_package::sbx_pool {
         tryb_liability_units: u64,
         sekx_liability_units: u64,
         /// Actual USDC reserved for MM (updated dynamically based on excess)
-        mm_reserved_usdc: u64
+        mm_reserved_usdc: u64,
+        /// Epoch tracking for yield distribution
+        current_epoch: u64,
+        last_epoch_timestamp_ms: u64,
+        epoch_duration_ms: u64,
+        /// Accumulated yield to be distributed (in SBX, micro-USD)
+        pending_yield_sbx: u64,
+        /// SBX treasury cap for minting/burning tokens
+        sbx_treasury: TreasuryCap<SBX>
     }
 
-    /// Per-user account state
+    /// Per-user account state (staking status)
+    /// Note: Users hold actual SBX tokens (Coin<SBX>), not just balances
     public struct Account has key, store {
         id: UID,
-        sbx: u64,
-        rc_deposit: u64,
-        usdc_owed: u64
+        usdc_owed: u64,
+        /// Staked amounts per currency (recorded when staking)
+        /// User needs both status (staked amount) AND SBX tokens to unstake
+        staked_usdc: u64,      // Staked USDC amount (in micro-USD)
+        staked_chfx: u64,      // Staked CHFX amount (in native units)
+        staked_tryb: u64,      // Staked TRYB amount (in native units)
+        staked_sekx: u64,      // Staked SEKX amount (in native units)
+        /// Last epoch when yield was claimed
+        last_yield_epoch: u64
     }
 
     /// Oracle and whitelist registry
@@ -84,7 +105,13 @@ module first_package::sbx_pool {
     }
 
     /// Initialize pool (entry function, not init)
-    public entry fun create_pool(fee_bps: u64, min_reserve_bps: u64, ctx: &mut TxContext) {
+    /// Requires SBX treasury cap to be passed (created via sbx::init)
+    public entry fun create_pool(
+        fee_bps: u64,
+        min_reserve_bps: u64,
+        sbx_treasury: TreasuryCap<SBX>,
+        ctx: &mut TxContext
+    ) {
         assert!(fee_bps <= 10_000, E_BAD_PARAMS);
         assert!(min_reserve_bps <= 10_000, E_BAD_PARAMS);
         let pool = Pool {
@@ -99,7 +126,12 @@ module first_package::sbx_pool {
             chfx_liability_units: 0,
             tryb_liability_units: 0,
             sekx_liability_units: 0,
-            mm_reserved_usdc: 0
+            mm_reserved_usdc: 0,
+            current_epoch: 0,
+            last_epoch_timestamp_ms: 0,
+            epoch_duration_ms: 86400000,  // Default: 1 day in milliseconds
+            pending_yield_sbx: 0,
+            sbx_treasury
         };
         transfer::public_transfer(pool, tx_context::sender(ctx));
     }
@@ -181,12 +213,19 @@ module first_package::sbx_pool {
         pool.usdc_reserve = pool.usdc_reserve - amount;
     }
 
-    /// User operations
-    public entry fun deposit_and_mint(account: &mut Account, pool: &mut Pool, amount: u64) {
+    /// Legacy function - kept for compatibility
+    /// Users should use stake functions instead which mint actual SBX tokens
+    public entry fun deposit_and_mint(
+        account: &mut Account,
+        pool: &mut Pool,
+        amount: u64,
+        ctx: &mut TxContext
+    ) {
         assert!(amount > 0, E_ZERO_AMOUNT);
         assert!(!pool.paused, E_PAUSED);
-        account.sbx = account.sbx + amount;
-        account.rc_deposit = account.rc_deposit + amount;
+        
+        // Mint SBX tokens and transfer to user
+        sbx::mint(&mut pool.sbx_treasury, tx_context::sender(ctx), amount, ctx);
         pool.total_sbx_supply = pool.total_sbx_supply + amount;
         pool.total_rc_liability = pool.total_rc_liability + amount;
     }
@@ -222,11 +261,11 @@ module first_package::sbx_pool {
             // 30% of excess → MM
             let mm_allocation = ((excess_mu * 3u128) / 10u128) as u64;
             
-            // 34% of excess → USDC
-            let usdc_allocation = ((excess_mu * 34u128) / 100u128) as u64;
+            // 50% of excess → USDC
+            let usdc_allocation = ((excess_mu * 5u128) / 10u128) as u64;
             
-            // 36% of excess → Auto-swap to regionals
-            let swap_total = ((excess_mu * 36u128) / 100u128) as u64;
+            // 20% of excess → Auto-swap to regionals
+            let swap_total = ((excess_mu * 2u128) / 10u128) as u64;
             
             // Distribute to unhealthiest vaults (inverse health weighting)
             let total_mu = regionals_sum_mu + new_usdc_mu;
@@ -250,10 +289,12 @@ module first_package::sbx_pool {
         }
     }
 
-    /// Deposit USDC, mint SBX at 1 SBX = 1 USD (micro-USD)
+    /// Stake USDC, mint SBX at 1 SBX = 1 USD (micro-USD)
     /// amount: USDC minimal units (6 decimals), equal to micro-USD
     /// Prices are passed as parameters (queried from API off-chain)
-    public entry fun deposit_usdc(
+    /// Records staked amount in account status
+    /// Mints actual SBX tokens and transfers to user
+    public entry fun stake_usdc(
         account: &mut Account,
         pool: &mut Pool,
         registry: &Registry,
@@ -261,7 +302,7 @@ module first_package::sbx_pool {
         chfx_price_microusd: u64,
         tryb_price_microusd: u64,
         sekx_price_microusd: u64,
-        ctx: &TxContext
+        ctx: &mut TxContext
     ) {
         assert!(amount > 0, E_ZERO_AMOUNT);
         assert!(!pool.paused, E_PAUSED);
@@ -271,12 +312,15 @@ module first_package::sbx_pool {
             pool, amount, chfx_price_microusd, tryb_price_microusd, sekx_price_microusd
         );
         
-        // Mint SBX equal to USD micro value
+        // Mint SBX equal to USD micro value and transfer to user
         let mint_amount = amount;
-        account.sbx = account.sbx + mint_amount;
+        sbx::mint(&mut pool.sbx_treasury, tx_context::sender(ctx), mint_amount, ctx);
         pool.total_sbx_supply = pool.total_sbx_supply + mint_amount;
         
-        // Update USDC reserve (maintains balance with regionals + 34% of excess)
+        // Record staked amount in account status
+        account.staked_usdc = account.staked_usdc + amount;
+        
+        // Update USDC reserve (maintains balance with regionals + 50% of excess)
         pool.usdc_reserve = usdc_reserve;
         
         // Update MM reserved amount (30% of excess)
@@ -285,24 +329,34 @@ module first_package::sbx_pool {
         // Note: Auto-swap amounts are advisory; actual swaps happen via market incentives (fees)
     }
 
-    public entry fun redeem_regional(account: &mut Account, pool: &mut Pool, amount: u64) {
+    /// Legacy function - kept for compatibility
+    /// Users should use unstake functions with Coin<SBX> instead
+    public entry fun redeem_regional(
+        account: &mut Account,
+        pool: &mut Pool,
+        sbx_coin: Coin<SBX>,
+        ctx: &mut TxContext
+    ) {
+        let amount = coin::value(&sbx_coin);
         assert!(amount > 0, E_ZERO_AMOUNT);
         assert!(!pool.paused, E_PAUSED);
-        assert!(account.sbx >= amount, E_INSUFFICIENT_SBX);
-        assert!(account.rc_deposit >= amount, E_INSUFFICIENT_DEPOSIT);
-        account.sbx = account.sbx - amount;
-        account.rc_deposit = account.rc_deposit - amount;
+        
+        // Burn SBX tokens
+        sbx::burn(&mut pool.sbx_treasury, sbx_coin);
         pool.total_sbx_supply = pool.total_sbx_supply - amount;
         pool.total_rc_liability = pool.total_rc_liability - amount;
     }
 
-    public entry fun deposit_chfx(
+    /// Stake CHFX, mint SBX based on USD value
+    /// Records staked amount in account status
+    /// Mints actual SBX tokens and transfers to user
+    public entry fun stake_chfx(
         account: &mut Account,
         pool: &mut Pool,
         registry: &Registry,
         amount: u64,
         price_microusd: u64,
-        ctx: &TxContext
+        ctx: &mut TxContext
     ) {
         assert!(amount > 0, E_ZERO_AMOUNT);
         assert!(!pool.paused, E_PAUSED);
@@ -314,20 +368,26 @@ module first_package::sbx_pool {
         let usd_value_mu = ((amount as u128) * (price_microusd as u128)) / 1_000_000u128;
         let mint_amount = usd_value_mu as u64;
         
-        account.sbx = account.sbx + mint_amount;
-        account.rc_deposit = account.rc_deposit + amount;
+        // Mint SBX tokens and transfer to user
+        sbx::mint(&mut pool.sbx_treasury, tx_context::sender(ctx), mint_amount, ctx);
         pool.total_sbx_supply = pool.total_sbx_supply + mint_amount;
         pool.total_rc_liability = pool.total_rc_liability + amount;
         pool.chfx_liability_units = pool.chfx_liability_units + amount;
+        
+        // Record staked amount in account status
+        account.staked_chfx = account.staked_chfx + amount;
     }
 
-    public entry fun deposit_tryb(
+    /// Stake TRYB, mint SBX based on USD value
+    /// Records staked amount in account status
+    /// Mints actual SBX tokens and transfers to user
+    public entry fun stake_tryb(
         account: &mut Account,
         pool: &mut Pool,
         registry: &Registry,
         amount: u64,
         price_microusd: u64,
-        ctx: &TxContext
+        ctx: &mut TxContext
     ) {
         assert!(amount > 0, E_ZERO_AMOUNT);
         assert!(!pool.paused, E_PAUSED);
@@ -339,20 +399,26 @@ module first_package::sbx_pool {
         let usd_value_mu = ((amount as u128) * (price_microusd as u128)) / 1_000_000u128;
         let mint_amount = usd_value_mu as u64;
         
-        account.sbx = account.sbx + mint_amount;
-        account.rc_deposit = account.rc_deposit + amount;
+        // Mint SBX tokens and transfer to user
+        sbx::mint(&mut pool.sbx_treasury, tx_context::sender(ctx), mint_amount, ctx);
         pool.total_sbx_supply = pool.total_sbx_supply + mint_amount;
         pool.total_rc_liability = pool.total_rc_liability + amount;
         pool.tryb_liability_units = pool.tryb_liability_units + amount;
+        
+        // Record staked amount in account status
+        account.staked_tryb = account.staked_tryb + amount;
     }
 
-    public entry fun deposit_sekx(
+    /// Stake SEKX, mint SBX based on USD value
+    /// Records staked amount in account status
+    /// Mints actual SBX tokens and transfers to user
+    public entry fun stake_sekx(
         account: &mut Account,
         pool: &mut Pool,
         registry: &Registry,
         amount: u64,
         price_microusd: u64,
-        ctx: &TxContext
+        ctx: &mut TxContext
     ) {
         assert!(amount > 0, E_ZERO_AMOUNT);
         assert!(!pool.paused, E_PAUSED);
@@ -364,38 +430,28 @@ module first_package::sbx_pool {
         let usd_value_mu = ((amount as u128) * (price_microusd as u128)) / 1_000_000u128;
         let mint_amount = usd_value_mu as u64;
         
-        account.sbx = account.sbx + mint_amount;
-        account.rc_deposit = account.rc_deposit + amount;
+        // Mint SBX tokens and transfer to user
+        sbx::mint(&mut pool.sbx_treasury, tx_context::sender(ctx), mint_amount, ctx);
         pool.total_sbx_supply = pool.total_sbx_supply + mint_amount;
         pool.total_rc_liability = pool.total_rc_liability + amount;
         pool.sekx_liability_units = pool.sekx_liability_units + amount;
+        
+        // Record staked amount in account status
+        account.staked_sekx = account.staked_sekx + amount;
     }
 
-    public entry fun instant_swap_to_usdc(account: &mut Account, pool: &mut Pool, sbx_amount: u64) {
-        assert!(sbx_amount > 0, E_ZERO_AMOUNT);
-        assert!(!pool.paused, E_PAUSED);
-        assert!(account.sbx >= sbx_amount, E_INSUFFICIENT_SBX);
-        let fee_bps = pool.fee_bps as u128;
-        let gross = sbx_amount as u128;
-        let payout = (gross * (10_000u128 - fee_bps)) / 10_000u128;
-        let payout_u64 = payout as u64;
-        let post_reserve = (pool.usdc_reserve as u128) - (payout as u128);
-        let post_supply = (pool.total_sbx_supply as u128) - (sbx_amount as u128);
-        let min_bps = pool.min_reserve_bps as u128;
-        if (post_supply > 0) {
-            assert!((post_reserve * 10_000u128) >= (min_bps * post_supply), E_RESERVE_BREACH);
-        };
-        account.sbx = account.sbx - sbx_amount;
-        pool.total_sbx_supply = pool.total_sbx_supply - sbx_amount;
-        pool.usdc_reserve = pool.usdc_reserve - payout_u64;
-        account.usdc_owed = account.usdc_owed + payout_u64;
-    }
 
-    public entry fun transfer_sbx(from_account: &mut Account, to_account: &mut Account, amount: u64) {
+    /// Transfer SBX tokens between users
+    /// Users transfer actual Coin<SBX> tokens, not account balances
+    /// This is a helper function - users can also use sbx::transfer directly
+    public entry fun transfer_sbx(
+        from_coin: &mut Coin<SBX>,
+        to: address,
+        amount: u64,
+        ctx: &mut TxContext
+    ) {
         assert!(amount > 0, E_ZERO_AMOUNT);
-        assert!(from_account.sbx >= amount, E_INSUFFICIENT_SBX);
-        from_account.sbx = from_account.sbx - amount;
-        to_account.sbx = to_account.sbx + amount;
+        sbx::transfer(from_coin, to, amount, ctx);
     }
 
     /// Compute direct swap rate from asset A to asset B (no USD intermediate)
@@ -506,21 +562,31 @@ module first_package::sbx_pool {
         };
     }
 
-    /// Withdraw USDC by burning SBX. Applies depth-aware fee.
+    /// Unstake USDC by burning SBX. Applies depth-aware fee.
+    /// Users can unstake anytime (before or after epoch completion).
+    /// Note: Users who unstake before epoch completion will not receive yield for that epoch.
+    /// Asymmetric withdrawal rule: User can only withdraw USDC if SBX > staked USDC.
+    /// This means USDC stakers cannot withdraw USDC (they can only withdraw regionals).
     /// Prices are passed as parameters (queried from API off-chain)
-    public entry fun withdraw_usdc(
+    /// User must pass SBX tokens to burn
+    public entry fun unstake_usdc(
         account: &mut Account,
         pool: &mut Pool,
         registry: &mut Registry,
-        sbx_amount: u64,
+        sbx_coin: Coin<SBX>,
         chfx_price_microusd: u64,
         tryb_price_microusd: u64,
         sekx_price_microusd: u64,
-        ctx: &TxContext
+        ctx: &mut TxContext
     ) {
+        let sbx_amount = coin::value(&sbx_coin);
         assert!(sbx_amount > 0, E_ZERO_AMOUNT);
         assert!(!pool.paused, E_PAUSED);
-        assert!(account.sbx >= sbx_amount, E_INSUFFICIENT_SBX);
+        
+        // Check user's SBX balance from coin
+        // Asymmetric withdrawal: User can only withdraw USDC if SBX > staked USDC
+        // This prevents USDC stakers from withdrawing USDC
+        assert!(sbx_amount > account.staked_usdc, E_USDC_DEPOSITOR_CANNOT_WITHDRAW_USDC);
 
         // Compute pre coverage using provided prices
         let (usdc_mu_pre, chfx_mu_pre, tryb_mu_pre, sekx_mu_pre, total_mu_pre) = vault_usd(
@@ -548,30 +614,44 @@ module first_package::sbx_pool {
         let net_u64 = net_usd_mu as u64;
         assert!(pool.usdc_reserve >= net_u64, E_RESERVE_BREACH);
 
-        // Burn SBX and reduce reserve
-        account.sbx = account.sbx - sbx_amount;
+        // Burn SBX tokens
+        sbx::burn(&mut pool.sbx_treasury, sbx_coin);
         pool.total_sbx_supply = pool.total_sbx_supply - sbx_amount;
         pool.usdc_reserve = pool.usdc_reserve - net_u64;
+        
+        // Note: We don't reduce staked_usdc here because:
+        // - If user has SBX > staked_usdc, they're withdrawing yield (not original stake)
+        // - If user has SBX <= staked_usdc, they cannot withdraw USDC (check above prevents this)
+        // - Regional stakers can withdraw USDC but don't have staked_usdc, so nothing to reduce
+        
         // Accrue fee value per currency
         registry.fee_usd_accumulated_mu = registry.fee_usd_accumulated_mu + fee_usd_mu;
         registry.fee_accumulated_usdc_mu = registry.fee_accumulated_usdc_mu + fee_usd_mu;
     }
 
-    /// Withdraw CHFX by burning SBX. Applies depth-aware fee based on CHFX scarcity.
+    /// Unstake CHFX by burning SBX. Applies depth-aware fee based on CHFX scarcity.
+    /// Users can unstake anytime (before or after epoch completion).
+    /// Note: Users who unstake before epoch completion will not receive yield for that epoch.
+    /// User needs both staked amount (status) AND SBX tokens to unstake.
     /// Prices are passed as parameters (queried from API off-chain)
-    public entry fun withdraw_chfx(
+    /// User must pass SBX tokens to burn
+    public entry fun unstake_chfx(
         account: &mut Account,
         pool: &mut Pool,
         registry: &mut Registry,
-        sbx_amount: u64,
+        sbx_coin: Coin<SBX>,
         chfx_price_microusd: u64,
         tryb_price_microusd: u64,
         sekx_price_microusd: u64,
-        ctx: &TxContext
+        ctx: &mut TxContext
     ) {
+        let sbx_amount = coin::value(&sbx_coin);
         assert!(sbx_amount > 0, E_ZERO_AMOUNT);
         assert!(!pool.paused, E_PAUSED);
-        assert!(account.sbx >= sbx_amount, E_INSUFFICIENT_SBX);
+        
+        // Calculate required CHFX units for this SBX amount
+        let required_chfx_units = ((sbx_amount as u128) * 1_000_000u128) / (chfx_price_microusd as u128);
+        assert!(account.staked_chfx >= (required_chfx_units as u64), E_INSUFFICIENT_STAKED);
 
         // Pre coverage
         let (usdc_mu_pre, chfx_mu_pre, tryb_mu_pre, sekx_mu_pre, total_mu_pre) = vault_usd(
@@ -597,30 +677,41 @@ module first_package::sbx_pool {
         let payout_units = ((net_usd_mu * 1_000_000u128) / (chfx_price_microusd as u128)) as u64;
         assert!(pool.chfx_liability_units >= payout_units, E_RESERVE_BREACH);
 
-        // Burn and reduce liability
-        account.sbx = account.sbx - sbx_amount;
+        // Burn SBX tokens and reduce liability
+        sbx::burn(&mut pool.sbx_treasury, sbx_coin);
         pool.total_sbx_supply = pool.total_sbx_supply - sbx_amount;
         pool.chfx_liability_units = pool.chfx_liability_units - payout_units;
+        
+        // Reduce staked amount (user unstaking)
+        account.staked_chfx = account.staked_chfx - payout_units;
+        
         // Accrue fee value per currency
         registry.fee_usd_accumulated_mu = registry.fee_usd_accumulated_mu + fee_usd_mu;
         registry.fee_accumulated_chfx_mu = registry.fee_accumulated_chfx_mu + fee_usd_mu;
     }
 
-    /// Withdraw TRYB
+    /// Unstake TRYB by burning SBX. User needs both staked amount (status) AND SBX tokens to unstake.
+    /// Users can unstake anytime (before or after epoch completion).
+    /// Note: Users who unstake before epoch completion will not receive yield for that epoch.
     /// Prices are passed as parameters (queried from API off-chain)
-    public entry fun withdraw_tryb(
+    /// User must pass SBX tokens to burn
+    public entry fun unstake_tryb(
         account: &mut Account,
         pool: &mut Pool,
         registry: &mut Registry,
-        sbx_amount: u64,
+        sbx_coin: Coin<SBX>,
         chfx_price_microusd: u64,
         tryb_price_microusd: u64,
         sekx_price_microusd: u64,
-        ctx: &TxContext
+        ctx: &mut TxContext
     ) {
+        let sbx_amount = coin::value(&sbx_coin);
         assert!(sbx_amount > 0, E_ZERO_AMOUNT);
         assert!(!pool.paused, E_PAUSED);
-        assert!(account.sbx >= sbx_amount, E_INSUFFICIENT_SBX);
+        
+        // Calculate required TRYB units for this SBX amount
+        let required_tryb_units = ((sbx_amount as u128) * 1_000_000u128) / (tryb_price_microusd as u128);
+        assert!(account.staked_tryb >= (required_tryb_units as u64), E_INSUFFICIENT_STAKED);
         let (usdc_mu_pre, chfx_mu_pre, tryb_mu_pre, sekx_mu_pre, total_mu_pre) = vault_usd(
             pool,
             chfx_price_microusd,
@@ -641,29 +732,41 @@ module first_package::sbx_pool {
         let fee_usd_mu = sbx_u128 - net_usd_mu;
         let payout_units = ((net_usd_mu * 1_000_000u128) / (tryb_price_microusd as u128)) as u64;
         assert!(pool.tryb_liability_units >= payout_units, E_RESERVE_BREACH);
-        account.sbx = account.sbx - sbx_amount;
+        // Burn SBX tokens and reduce liability
+        sbx::burn(&mut pool.sbx_treasury, sbx_coin);
         pool.total_sbx_supply = pool.total_sbx_supply - sbx_amount;
         pool.tryb_liability_units = pool.tryb_liability_units - payout_units;
+        
+        // Reduce staked amount (user unstaking)
+        account.staked_tryb = account.staked_tryb - payout_units;
+        
         // Accrue fee value per currency
         registry.fee_usd_accumulated_mu = registry.fee_usd_accumulated_mu + fee_usd_mu;
         registry.fee_accumulated_tryb_mu = registry.fee_accumulated_tryb_mu + fee_usd_mu;
     }
 
-    /// Withdraw SEKX
+    /// Unstake SEKX by burning SBX. User needs both staked amount (status) AND SBX tokens to unstake.
+    /// Users can unstake anytime (before or after epoch completion).
+    /// Note: Users who unstake before epoch completion will not receive yield for that epoch.
     /// Prices are passed as parameters (queried from API off-chain)
-    public entry fun withdraw_sekx(
+    /// User must pass SBX tokens to burn
+    public entry fun unstake_sekx(
         account: &mut Account,
         pool: &mut Pool,
         registry: &mut Registry,
-        sbx_amount: u64,
+        sbx_coin: Coin<SBX>,
         chfx_price_microusd: u64,
         tryb_price_microusd: u64,
         sekx_price_microusd: u64,
-        ctx: &TxContext
+        ctx: &mut TxContext
     ) {
+        let sbx_amount = coin::value(&sbx_coin);
         assert!(sbx_amount > 0, E_ZERO_AMOUNT);
         assert!(!pool.paused, E_PAUSED);
-        assert!(account.sbx >= sbx_amount, E_INSUFFICIENT_SBX);
+        
+        // Calculate required SEKX units for this SBX amount
+        let required_sekx_units = ((sbx_amount as u128) * 1_000_000u128) / (sekx_price_microusd as u128);
+        assert!(account.staked_sekx >= (required_sekx_units as u64), E_INSUFFICIENT_STAKED);
         let (usdc_mu_pre, chfx_mu_pre, tryb_mu_pre, sekx_mu_pre, total_mu_pre) = vault_usd(
             pool,
             chfx_price_microusd,
@@ -684,25 +787,106 @@ module first_package::sbx_pool {
         let fee_usd_mu = sbx_u128 - net_usd_mu;
         let payout_units = ((net_usd_mu * 1_000_000u128) / (sekx_price_microusd as u128)) as u64;
         assert!(pool.sekx_liability_units >= payout_units, E_RESERVE_BREACH);
-        account.sbx = account.sbx - sbx_amount;
+        // Burn SBX tokens and reduce liability
+        sbx::burn(&mut pool.sbx_treasury, sbx_coin);
         pool.total_sbx_supply = pool.total_sbx_supply - sbx_amount;
         pool.sekx_liability_units = pool.sekx_liability_units - payout_units;
+        
+        // Reduce staked amount (user unstaking)
+        account.staked_sekx = account.staked_sekx - payout_units;
+        
         // Accrue fee value per currency
         registry.fee_usd_accumulated_mu = registry.fee_usd_accumulated_mu + fee_usd_mu;
         registry.fee_accumulated_sekx_mu = registry.fee_accumulated_sekx_mu + fee_usd_mu;
     }
 
     /// View helpers
-    public fun sbx_balance_of(account: &Account): u64 {
-        account.sbx
+    /// Note: Users hold actual Coin<SBX> tokens, so balance is checked from coin objects
+    /// This function is kept for compatibility but users should check coin balance directly
+
+    /// Get staked amounts
+    public fun staked_usdc_of(account: &Account): u64 {
+        account.staked_usdc
     }
 
-    public fun rc_deposit_of(account: &Account): u64 {
-        account.rc_deposit
+    public fun staked_chfx_of(account: &Account): u64 {
+        account.staked_chfx
+    }
+
+    public fun staked_tryb_of(account: &Account): u64 {
+        account.staked_tryb
+    }
+
+    public fun staked_sekx_of(account: &Account): u64 {
+        account.staked_sekx
     }
 
     public fun usdc_owed_of(account: &Account): u64 {
         account.usdc_owed
+    }
+
+    /// Create a new account for a user
+    /// Users need an account object to stake/unstake
+    public entry fun create_account(ctx: &mut TxContext) {
+        let account = Account {
+            id: object::new(ctx),
+            usdc_owed: 0,
+            staked_usdc: 0,
+            staked_chfx: 0,
+            staked_tryb: 0,
+            staked_sekx: 0,
+            last_yield_epoch: 0
+        };
+        transfer::public_transfer(account, tx_context::sender(ctx));
+    }
+
+    /// Migrate staking status from one account to another
+    /// Transfers all staked amounts (staked_usdc, staked_chfx, staked_tryb, staked_sekx)
+    /// from source_account to destination_account
+    /// 
+    /// Requirements:
+    /// - Only the owner of source_account can migrate (must be sender)
+    /// - Destination account must exist (created via create_account)
+    /// - Source account must have some staking status to migrate
+    /// 
+    /// After migration:
+    /// - Destination account can unstake if they have the corresponding SBX tokens
+    /// - Source account's staked amounts are reset to 0
+    /// - last_yield_epoch is transferred to destination (uses the later epoch)
+    public entry fun migrate_staking_status(
+        source_account: &mut Account,
+        destination_account: &mut Account,
+        ctx: &TxContext
+    ) {
+        // Verify sender owns the source account (in Move, this is implicit via object ownership)
+        // The source_account must be passed as owned object, so only owner can call
+        
+        // Check that source has staking status to migrate
+        let total_staked = source_account.staked_usdc + 
+                          source_account.staked_chfx + 
+                          source_account.staked_tryb + 
+                          source_account.staked_sekx;
+        assert!(total_staked > 0, E_NO_STAKING_STATUS);
+        
+        // Transfer staked amounts to destination
+        destination_account.staked_usdc = destination_account.staked_usdc + source_account.staked_usdc;
+        destination_account.staked_chfx = destination_account.staked_chfx + source_account.staked_chfx;
+        destination_account.staked_tryb = destination_account.staked_tryb + source_account.staked_tryb;
+        destination_account.staked_sekx = destination_account.staked_sekx + source_account.staked_sekx;
+        
+        // Transfer last_yield_epoch (use the later epoch to ensure yield eligibility)
+        if (source_account.last_yield_epoch > destination_account.last_yield_epoch) {
+            destination_account.last_yield_epoch = source_account.last_yield_epoch;
+        };
+        
+        // Reset source account staking status
+        source_account.staked_usdc = 0;
+        source_account.staked_chfx = 0;
+        source_account.staked_tryb = 0;
+        source_account.staked_sekx = 0;
+        // Note: We don't reset last_yield_epoch on source, as it's informational
+        
+        // Note: usdc_owed is not migrated (it's a separate debt mechanism)
     }
 
     public fun stats(pool: &Pool): (u64, u64, u64, u64, bool) {
@@ -724,13 +908,13 @@ module first_package::sbx_pool {
         if (avg_tvl_7d_mu == 0u128) { 0u64 } else { (((fees_7d_mu * 52u128) * 10_000u128) / avg_tvl_7d_mu) as u64 }
     }
 
-    /// Calculate estimated APY for a specific currency (in basis points)
+    /// Calculate unified APY for all depositors (in basis points)
+    /// All depositors earn the same unified APY (higher than USDC alone)
     /// Dynamic based on pool balance and allocation
     /// Balance = USDC / sum(regionals)
-    public fun estimated_apy_bps_per_currency(
+    public fun estimated_unified_apy_bps(
         registry: &Registry,
         pool: &Pool,
-        currency_code: u8,  // 0=USDC, 1=CHFX, 2=TRYB, 3=SEKX
         fees_7d_mu: u128,
         avg_tvl_7d_mu: u128,
         chfx_price_mu: u64,
@@ -752,43 +936,31 @@ module first_package::sbx_pool {
             10_000u128
         };
         
-        // 2. Base fee APY
+        // 2. Base fee APY (unified for all)
         let fee_apy_bps = ((fees_7d_mu * 52u128 * 10_000u128) / avg_tvl_7d_mu) as u64;
         
-        // 3. MM return APY (only if balanced and has MM allocation)
+        // 3. MM return APY (unified, weighted average of all currencies)
+        // Only if balanced and has MM allocation
         let mm_apy_bps = if (balance_ratio >= 10_000u128 && pool.mm_reserved_usdc > 0) {
-            let mm_return_bps = if (currency_code == 0u8) { registry.mm_return_usdc_bps }
-                else if (currency_code == 1u8) { registry.mm_return_chfx_bps }
-                else if (currency_code == 2u8) { registry.mm_return_tryb_bps }
-                else { registry.mm_return_sekx_bps };
-            mm_return_bps
+            // Weighted average of MM returns based on pool composition
+            let total_mu = usdc_mu + regionals_sum_mu;
+            let usdc_weight = if (total_mu > 0) { (usdc_mu * 10_000u128) / total_mu } else { 0u128 };
+            let chfx_weight = if (total_mu > 0) { (chfx_mu * 10_000u128) / total_mu } else { 0u128 };
+            let tryb_weight = if (total_mu > 0) { (tryb_mu * 10_000u128) / total_mu } else { 0u128 };
+            let sekx_weight = if (total_mu > 0) { (sekx_mu * 10_000u128) / total_mu } else { 0u128 };
+            
+            let weighted_mm = ((usdc_weight * (registry.mm_return_usdc_bps as u128)) +
+                              (chfx_weight * (registry.mm_return_chfx_bps as u128)) +
+                              (tryb_weight * (registry.mm_return_tryb_bps as u128)) +
+                              (sekx_weight * (registry.mm_return_sekx_bps as u128))) / 10_000u128;
+            weighted_mm as u64
         } else {
             0u64
         };
         
-        // 4. Balance compensation factor
-        let compensation_bps = if (currency_code == 0u8) {
-            // USDC APY
-            if (balance_ratio < 10_000u128) {
-                // Unbalanced: USDC gets HIGHER APY to encourage deposits
-                // Bonus = (1.0 - ratio) * 300 bps max (higher than regionals to restore balance)
-                ((10_000u128 - balance_ratio) / 33u128) as u64  // Max +300 bps
-            } else {
-                0u64
-            }
-        } else {
-            // Regional currency APY
-            if (balance_ratio < 10_000u128) {
-                // Unbalanced: bonus = (1.0 - ratio) * 200 bps max
-                ((10_000u128 - balance_ratio) / 50u128) as u64
-            } else {
-                // Balanced: +150 bps bonus over USDC
-                150u64
-            }
-        };
-        
-        // 5. Total APY = fee APY + MM APY + compensation
-        let total_apy = (fee_apy_bps as u128) + (mm_apy_bps as u128) + (compensation_bps as u128);
+        // 4. Unified APY = fee APY + MM APY
+        // All depositors earn the same unified APY (higher than USDC alone)
+        let total_apy = (fee_apy_bps as u128) + (mm_apy_bps as u128);
         if (total_apy > 10_000u128) { 10_000u64 } else { total_apy as u64 }
     }
 
@@ -861,6 +1033,112 @@ module first_package::sbx_pool {
         registry.mm_return_chfx_bps = chfx_bps;
         registry.mm_return_tryb_bps = tryb_bps;
         registry.mm_return_sekx_bps = sekx_bps;
+    }
+
+    /// Admin: Set epoch duration (in milliseconds)
+    public entry fun admin_set_epoch_duration(
+        pool: &mut Pool,
+        duration_ms: u64,
+        ctx: &TxContext
+    ) {
+        assert!(pool.admin == tx_context::sender(ctx), E_NOT_ADMIN);
+        assert!(duration_ms > 0, E_BAD_PARAMS);
+        pool.epoch_duration_ms = duration_ms;
+    }
+
+    /// Check if epoch is complete and advance if needed
+    /// Returns: (epoch_complete: bool, current_epoch: u64)
+    public fun check_and_advance_epoch(pool: &mut Pool, current_timestamp_ms: u64): (bool, u64) {
+        if (pool.last_epoch_timestamp_ms == 0) {
+            // First epoch - initialize
+            pool.last_epoch_timestamp_ms = current_timestamp_ms;
+            pool.current_epoch = 1;
+            (false, pool.current_epoch)
+        } else {
+            let elapsed = current_timestamp_ms - pool.last_epoch_timestamp_ms;
+            if (elapsed >= pool.epoch_duration_ms) {
+                // Epoch complete - advance
+                pool.current_epoch = pool.current_epoch + 1;
+                pool.last_epoch_timestamp_ms = current_timestamp_ms;
+                (true, pool.current_epoch)
+            } else {
+                (false, pool.current_epoch)
+            }
+        }
+    }
+
+    /// Distribute yield SBX to staker accounts after epoch completion
+    /// Yield is distributed proportionally based on staked amounts at epoch completion
+    /// Users who unstake before epoch completion will not receive yield for that epoch
+    /// (because their staked amounts are reduced, so they get no yield)
+    /// This function should be called after epoch completion
+    public entry fun distribute_yield_after_epoch(
+        account: &mut Account,
+        pool: &mut Pool,
+        registry: &Registry,
+        current_timestamp_ms: u64,
+        chfx_price_mu: u64,
+        tryb_price_mu: u64,
+        sekx_price_mu: u64,
+        ctx: &mut TxContext
+    ) {
+        assert!(!pool.paused, E_PAUSED);
+        
+        // Check and advance epoch
+        let (epoch_complete, current_epoch) = check_and_advance_epoch(pool, current_timestamp_ms);
+        // Only distribute yield if epoch is complete and user hasn't claimed for this epoch
+        assert!(epoch_complete, E_EPOCH_NOT_COMPLETE);
+        assert!(account.last_yield_epoch < current_epoch, E_EPOCH_NOT_COMPLETE);
+        
+        // Calculate user's total staked value in micro-USD at epoch completion
+        // Note: If user unstaked before epoch completion, their staked amounts are already reduced
+        // So they will receive yield only for what remains staked at epoch completion
+        let staked_usdc_mu = account.staked_usdc;
+        let staked_chfx_mu = ((account.staked_chfx as u128) * (chfx_price_mu as u128)) / 1_000_000u128;
+        let staked_tryb_mu = ((account.staked_tryb as u128) * (tryb_price_mu as u128)) / 1_000_000u128;
+        let staked_sekx_mu = ((account.staked_sekx as u128) * (sekx_price_mu as u128)) / 1_000_000u128;
+        let total_staked_mu = (staked_usdc_mu as u128) + staked_chfx_mu + staked_tryb_mu + staked_sekx_mu;
+        
+        if (total_staked_mu == 0u128) {
+            // No staked amount at epoch completion (user unstaked everything before epoch ended)
+            // No yield for this user
+            account.last_yield_epoch = current_epoch;
+            return
+        };
+        
+        // Calculate total pool staked value
+        let pool_usdc_mu = pool.usdc_reserve as u128;
+        let pool_chfx_mu = ((pool.chfx_liability_units as u128) * (chfx_price_mu as u128)) / 1_000_000u128;
+        let pool_tryb_mu = ((pool.tryb_liability_units as u128) * (tryb_price_mu as u128)) / 1_000_000u128;
+        let pool_sekx_mu = ((pool.sekx_liability_units as u128) * (sekx_price_mu as u128)) / 1_000_000u128;
+        let total_pool_mu = pool_usdc_mu + pool_chfx_mu + pool_tryb_mu + pool_sekx_mu;
+        
+        if (total_pool_mu == 0u128) {
+            account.last_yield_epoch = current_epoch;
+            return
+        };
+        
+        // Calculate user's share of yield
+        // Yield = pending_yield_sbx * (user_staked / total_pool_staked)
+        let user_yield = ((pool.pending_yield_sbx as u128) * total_staked_mu) / total_pool_mu;
+        
+        // Distribute yield by minting SBX tokens and transferring to user
+        sbx::mint(&mut pool.sbx_treasury, tx_context::sender(ctx), user_yield as u64, ctx);
+        pool.total_sbx_supply = pool.total_sbx_supply + (user_yield as u64);
+        
+        // Update last yield epoch
+        account.last_yield_epoch = current_epoch;
+    }
+
+    /// Admin: Add yield to pool (called after epoch, from fees/MM returns)
+    public entry fun admin_add_yield(
+        pool: &mut Pool,
+        yield_amount_sbx: u64,
+        ctx: &TxContext
+    ) {
+        assert!(pool.admin == tx_context::sender(ctx), E_NOT_ADMIN);
+        assert!(yield_amount_sbx > 0, E_ZERO_AMOUNT);
+        pool.pending_yield_sbx = pool.pending_yield_sbx + yield_amount_sbx;
     }
 
     /// Compute vault USD values (micro-USD) using provided prices

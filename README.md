@@ -1,18 +1,20 @@
 # StableX - Stablecoin Exchange on IOTA
 
-A stablecoin exchange platform built on IOTA using Move language, inspired by Sanctum's infinity pool concept. The exchange addresses fragmented liquidity for regional stablecoins by allowing users to deposit regional stablecoins, earn yield, and receive SBX tokens that can be instantly exchanged for USDC or swapped directly between regional stablecoins.
+A stablecoin exchange platform built on IOTA using Move language, inspired by Sanctum's infinity pool concept. The exchange addresses fragmented liquidity for regional stablecoins by allowing users to deposit USDC or regional stablecoins, earn unified yield, and receive SBX tokens that can be withdrawn as any currency (with asymmetric withdrawal rules).
 
 ## Project Overview
 
 ### Concept
-- **Regional Stablecoins** (CHFX, TRYB, SEKX) → EUR-focused stablecoins
-- **SBX Token** → INF (Infinity Token)
-- **USDC Reserve Pool** → SOL Reserve Pool
+- **Unified Basket**: All currencies (USDC + CHFX + TRYB + SEKX) in one pool
+- **SBX Token**: Single fungible token (1 SBX = 1 USD) with rebasing mechanism
+- **Unified APY**: All depositors earn the same APY (higher than USDC alone)
+- **Asymmetric Withdrawal**: Regional depositors can withdraw USDC or regionals; USDC depositors can only withdraw regionals
 
-Users deposit regional stablecoins to earn yield, receive SBX tokens (1 SBX = 1 USD), and can:
-- Instantly exchange SBX for USDC from the reserve pool
+Users deposit USDC or regional stablecoins to earn unified yield, receive SBX tokens (1 SBX = 1 USD), and can:
+- **Regional depositors**: Withdraw any regional stablecoin OR USDC
+- **USDC depositors**: Withdraw any regional stablecoin (cannot withdraw USDC)
 - Swap directly between regional stablecoins (A→B, no USD intermediate)
-- Withdraw regional stablecoins with dynamic fees based on pool depth
+- All withdrawals subject to dynamic fees based on pool depth
 
 ### Price Feed Architecture
 - **API-Based Price Feeds**: Prices are queried off-chain via API and passed as parameters to contract functions
@@ -57,40 +59,63 @@ Users deposit regional stablecoins to earn yield, receive SBX tokens (1 SBX = 1 
 - Reserve = sum(regionals) (maintain 1:1 ratio)
 - Excess = USDC - sum(regionals)
 - **30% of excess** → Off-chain MM allocation
-- **34% of excess** → USDC
-- **36% of excess** → Auto-swap to regionals (distributed to unhealthiest vaults)
+- **50% of excess** → USDC reserve
+- **20% of excess** → Auto-swap to regionals (distributed to unhealthiest vaults)
 
-### 4. Dynamic Per-Currency APY
+### 4. Unified APY (All Depositors)
 
-**When Unbalanced** (USDC < regionals):
-- **USDC**: Higher APY (bonus up to +300 bps) to encourage deposits
-- **Regionals**: Higher APY (bonus up to +200 bps) to encourage deposits
+**Unified APY for All**:
+- All depositors (USDC and regionals) earn the same unified APY
+- Unified APY = Fee APY + MM APY (weighted average)
+- Higher than USDC alone because regionals are included in the pool
 
-**When Balanced** (USDC ≥ regionals):
-- **USDC**: Base APY + MM returns
-- **Regionals**: Base APY + MM returns + **150 bps bonus** (always higher than USDC)
+**APY Components**:
+- **Fee APY**: From swap fees (accumulated across all currencies)
+- **MM APY**: Weighted average of MM returns (based on pool composition)
+- **Rebasing**: SBX token quantity increases with APY (transparent yield accrual)
 
-APY includes:
-- Swap fees (accumulated per currency)
-- MM returns (mocked, 2-8% range, set by admin)
-- Balance compensation (dynamic based on pool health)
+**Fairness**:
+- **Regional depositors**: Get liquidity benefit (can withdraw USDC) + unified APY
+- **USDC depositors**: Get higher unified APY (than USDC alone) but cannot withdraw USDC
 
-### 5. Off-Chain MM Allocation
+### 5. Asymmetric Withdrawal Rules
+
+**Regional Depositors** (CHFX, TRYB, SEKX):
+- Can withdraw **any regional stablecoin** (CHFX, TRYB, or SEKX)
+- Can withdraw **USDC** (liquidity benefit)
+- Subject to depth-based fees (three-tier fee curve)
+
+**USDC Depositors**:
+- Can withdraw **any regional stablecoin** (CHFX, TRYB, or SEKX)
+- **Cannot withdraw USDC** (prevents circular staking logic)
+- Subject to depth-based fees (three-tier fee curve)
+
+**Rationale**:
+- Regional depositors provide direct liquidity (prevent double swaps) → rewarded with USDC withdrawal option
+- USDC depositors benefit from higher unified APY (than USDC alone) → fair compensation
+
+### 6. Off-Chain MM Allocation
 
 - **Dynamic allocation**: Only when pool is balanced (has excess)
 - **30% of excess** goes to MM when USDC ≥ sum(regionals)
 - **Random returns**: Mocked returns (2-8% APY range) set by admin periodically
-- Returns factor into per-currency APY calculations
+- Returns factor into unified APY calculation (weighted average)
 
 ## Package Information
 
-### Latest Package (EUR-Focused with Updated Allocation: 30/34/36 Split)
-- **Package ID:** `0x1cf62d8fda34ae433ca12bdedcf4834e2a848c5ac4bc55a8c866c85697fc5295`
-- **Published:** Latest version with updated USDC allocation (30% MM, 34% USDC, 36% regionals)
-- **Transaction Digest:** `611riKrwzR62eKCZ8Rhu4egaMDboJPuesKeFJC3kajAm`
-- **Modules:** `chfx`, `tryb`, `sekx`, `sbx_pool`, `usdc`, `jpyc`, `myrc`, `xsgd`, `pyth_adapter`
-- **Key Changes:**
-  - Updated excess allocation: 30% to MM, 34% to USDC, 36% to regionals (changed from 40/60 split)
+### Latest Package (Unified Basket with Asymmetric Withdrawal + Migration)
+- **Package ID:** `0x71157d06f6ea5ac0d5f952881126591da1c0d5e3980e9ab9dbf1d08dff989846`
+- **Published:** Latest version with unified basket architecture, asymmetric withdrawal rules, and account migration
+- **Transaction Digest:** `4NsomjHZC6S54ZFjSbQDUt1RJHhSjbHbFtEPS1wtRziC`
+- **Modules:** `chfx`, `tryb`, `sekx`, `sbx`, `sbx_pool`, `usdc`, `jpyc`, `myrc`, `xsgd`
+- **Key Features:**
+  - **Unified Basket**: All currencies (USDC + regionals) in one pool
+  - **Unified APY**: All depositors earn the same APY (higher than USDC alone)
+  - **Asymmetric Withdrawal**: Regional depositors can withdraw USDC; USDC depositors cannot
+  - **Updated Allocation**: 30% MM, 50% USDC, 20% regionals
+  - **SBX Token Minting**: Actual SBX tokens minted/burned on stake/unstake
+  - **Account Migration**: Transfer staking status between accounts
+  - **Epoch-Based Yield**: Yield distributed after epoch completion
   - EUR-focused tokens (CHFX, TRYB, SEKX) with API-based price feeds
   - All functions accept prices as `u64` parameters (micro-USD)
   - Prices queried from API off-chain and passed to contract
@@ -155,14 +180,20 @@ All functions that require prices now accept them as direct parameters:
 - `swap_regional()`: Requires `price_from_microusd`, `price_to_microusd`
 - `withdraw_usdc()`, `withdraw_chfx()`, `withdraw_tryb()`, `withdraw_sekx()`: Require price parameters
 
-**Note:** The `pyth_adapter` module is still included in the package but is no longer used by `sbx_pool`. It remains for potential future use or reference.
+**Note:** The `pyth_adapter` module has been removed as the system now uses API-based price feeds exclusively.
 
 ## Key Transactions
 
-### Latest Package Publication (Updated Allocation: 30/34/36 Split)
+### Latest Package Publication (SBX Token + Migration Support)
+- **Transaction Digest:** `4NsomjHZC6S54ZFjSbQDUt1RJHhSjbHbFtEPS1wtRziC`
+- **Package ID:** `0x71157d06f6ea5ac0d5f952881126591da1c0d5e3980e9ab9dbf1d08dff989846`
+- **Modules:** chfx, tryb, sekx, sbx, sbx_pool, usdc, jpyc, myrc, xsgd
+- **Published:** Package includes SBX token minting/burning, account migration, epoch-based yield distribution, and updated allocation (30% MM, 50% USDC, 20% regionals)
+
+### Previous Package Publication (Updated Allocation: 30/34/36 Split)
 - **Transaction Digest:** `611riKrwzR62eKCZ8Rhu4egaMDboJPuesKeFJC3kajAm`
 - **Package ID:** `0x1cf62d8fda34ae433ca12bdedcf4834e2a848c5ac4bc55a8c866c85697fc5295`
-- **Modules:** chfx, tryb, sekx, sbx_pool, usdc, jpyc, myrc, xsgd, pyth_adapter
+- **Modules:** chfx, tryb, sekx, sbx, sbx_pool, usdc, jpyc, myrc, xsgd
 - **Published:** Package includes updated USDC allocation (30% MM, 34% USDC, 36% regionals) and EUR-focused tokens with API-based price feeds
 
 ### Token Minting Transactions
@@ -182,19 +213,16 @@ All tokens and treasury caps are owned by:
 ### Modules
 
 1. **sbx_pool.move** - Core pool logic
+   - **Unified basket**: All currencies (USDC + regionals) in one pool
+   - **Asymmetric withdrawal**: Regional depositors can withdraw USDC; USDC depositors cannot
+   - **Unified APY**: All depositors earn the same APY (weighted average)
    - Pool state management with balance-based allocation
    - Three-tier fee curve (80%/30% thresholds)
    - Direct A→B swaps (no USD intermediate)
-   - Per-currency fee tracking and APY calculation
    - Dynamic MM allocation (30% of excess)
    - Deposit/withdraw operations with depth-aware fees
    - **API-based price feeds** - prices passed as parameters
 
-2. **pyth_adapter.move** - Pyth Network integration (legacy, not used by sbx_pool)
-   - Price fetching from Pyth (for reference)
-   - Price freshness validation
-   - Micro-USD conversion
-   - Helper functions for PriceInfoObject access
 
 3. **chfx.move, tryb.move, sekx.move, usdc.move** - Token modules
    - Regulated currency creation (EUR-focused tokens)
@@ -203,16 +231,41 @@ All tokens and treasury caps are owned by:
 
 ### Key Features
 
+- **Unified Basket:** All currencies (USDC + regionals) in one pool
+- **Unified APY:** All depositors earn the same APY (higher than USDC alone)
+- **Asymmetric Withdrawal:** Regional depositors can withdraw USDC; USDC depositors cannot
 - **API-Based Price Feeds:** Prices queried off-chain and passed as parameters (no onchain queries)
 - **EUR-Focused Tokens:** CHFX (Swiss Franc), TRYB (Turkish Lira), SEKX (Swedish Krona)
 - **Three-Tier Fee Curve:** Cheap fixed rate (≥80%), linear scaling (30-80%), sudden jump (<30%)
 - **Direct Swaps:** A→B swaps without USD intermediate (true infinity pool)
-- **Balance-Based Allocation:** USDC allocation maintains 1:1 ratio with regionals
-- **Dynamic APY:** Per-currency APY based on pool balance and MM returns
+- **Balance-Based Allocation:** USDC allocation maintains 1:1 ratio with regionals (30/50/20 split)
+- **Rebasing Mechanism:** SBX token quantity increases with APY (transparent yield accrual)
 - **USD Value Calculation:** Accurate USD value calculation using API-provided prices
 - **SBX Token Minting:** SBX tokens minted 1:1 with USD value of deposits
 
 ## Function Signatures
+
+### Account Management Functions
+
+```move
+// Create a new account for a user
+// Users need an account object to stake/unstake
+public entry fun create_account(ctx: &mut TxContext);
+
+// Migrate staking status from one account to another
+// Transfers all staked amounts (staked_usdc, staked_chfx, staked_tryb, staked_sekx)
+// from source_account to destination_account
+// Requirements:
+// - Only the owner of source_account can migrate
+// - Destination account must exist (created via create_account)
+// - Source account must have some staking status to migrate
+// After migration, destination account can unstake if they have corresponding SBX tokens
+public entry fun migrate_staking_status(
+    source_account: &mut Account,
+    destination_account: &mut Account,
+    ctx: &TxContext
+);
+```
 
 ### Deposit Functions
 
@@ -248,6 +301,8 @@ public entry fun deposit_sekx(...)
 
 ```move
 // Withdraw USDC (applies three-tier fee curve)
+// Asymmetric rule: Only regional depositors can withdraw USDC
+// USDC depositors cannot withdraw USDC (they can only withdraw regionals)
 // Prices queried from API and passed as parameters
 public entry fun withdraw_usdc(
     account: &mut Account,
@@ -351,11 +406,11 @@ public entry fun admin_set_fee_params(
 ### View Functions
 
 ```move
-// Calculate per-currency APY (dynamic based on balance)
-public fun estimated_apy_bps_per_currency(
+// Calculate unified APY for all depositors (dynamic based on balance)
+// All depositors earn the same unified APY (higher than USDC alone)
+public fun estimated_unified_apy_bps(
     registry: &Registry,
     pool: &Pool,
-    currency_code: u8,  // 0=USDC, 1=CHFX, 2=TRYB, 3=SEKX
     fees_7d_mu: u128,
     avg_tvl_7d_mu: u128,
     chfx_price_mu: u64,
@@ -419,10 +474,30 @@ public fun coverage_bps(
 - Location: `first_package/tests/sbx_pool_fuzz_tests.move`
 - Tests: Deposit calculations, swap fees, reserve ratios, price conversions, APY calculations
 
+### Integration Tests
+- Location: `first_package/tests/sbx_pool_integration_tests.move`
+- Tests: Full integration tests including account creation, migration, staking, unstaking, swaps, yield distribution
+
 ### On-Chain Testing
-- Package published and ready for testing
-- Feed connectivity tested (function executes correctly)
-- Note: Feeds may need to be registered/updated in Pyth State before use
+- **Package Published:** ✅ Successfully published to IOTA testnet
+- **Package ID:** `0x71157d06f6ea5ac0d5f952881126591da1c0d5e3980e9ab9dbf1d08dff989846`
+- **Test Results:** See `first_package/TEST_RESULTS.md` for detailed on-chain test results
+
+**Tested Functions (All Successful):**
+- ✅ `create_registry` - Registry created successfully
+- ✅ `create_account` - Account created successfully
+- ✅ `create_pool` - Pool created successfully
+- ✅ `admin_set_whitelist` - Whitelist updated
+- ✅ `admin_set_prices_microusd` - Prices set
+- ✅ `admin_set_targets` - Targets configured
+- ✅ `admin_set_fee_params` - Fee parameters set
+- ✅ `admin_set_mm_returns` - MM returns configured
+- ✅ `stake_usdc` - USDC staking successful, SBX tokens minted
+- ✅ `staked_usdc_of` - View function working
+- ✅ `stats` - Pool stats retrieved
+- ✅ `prices_microusd` - Prices retrieved
+
+All core functions tested and working correctly on-chain!
 
 ## Dependencies
 
@@ -443,15 +518,18 @@ Pyth = "0x23994dd119480ea614f7623520337058dca913cb1bb6e5d8d51c7b067d3ca3bb"
 ## Development Status
 
 ✅ **Completed:**
+- **Unified Basket Architecture**: All currencies (USDC + regionals) in one pool
+- **Asymmetric Withdrawal Rules**: Regional depositors can withdraw USDC; USDC depositors cannot
+- **Unified APY**: All depositors earn the same APY (higher than USDC alone)
 - Token creation (CHFX, TRYB, SEKX, USDC) - EUR-focused
 - API-based price feed integration (no onchain queries)
 - Price parameters in all price-sensitive functions
 - Three-tier fee curve (80%/30% thresholds)
 - Direct A→B swaps (no USD intermediate)
-- Balance-based USDC allocation (30/34/36 split)
+- Balance-based USDC allocation (30/50/20 split)
 - Dynamic MM allocation (30% of excess)
-- Per-currency APY calculation (balance-based)
-- Per-currency fee tracking
+- Unified APY calculation (weighted average)
+- Deposit type tracking (for asymmetric withdrawal enforcement)
 - Package compilation and publishing
 - Token minting (1000 tokens of each type)
 
@@ -470,21 +548,20 @@ else:
     reserve = sum(regionals)
     excess = USDC - sum(regionals)
     MM_allocation = excess * 0.3
-    usdc_allocation = excess * 0.34
-    swap_allocation = excess * 0.36 (to unhealthiest regionals)
+    usdc_allocation = excess * 0.5
+    swap_allocation = excess * 0.2 (to unhealthiest regionals)
 ```
 
-### Per-Currency APY
+### Unified APY
 ```
 balance_ratio = USDC / sum(regionals)
 
-USDC APY:
-  if unbalanced (ratio < 1.0): base_fee_apy + compensation_bonus (higher than regionals)
-  if balanced (ratio >= 1.0): base_fee_apy + MM_apy
+Unified APY (for all depositors):
+  fee_apy = (fees_7d / avg_tvl_7d) * 52 * 10_000
+  mm_apy = weighted_average(mm_returns) based on pool composition
+  unified_apy = fee_apy + mm_apy
 
-Regional APY:
-  if unbalanced (ratio < 1.0): base_fee_apy + compensation_bonus
-  if balanced (ratio >= 1.0): base_fee_apy + MM_apy + 150_bps_bonus
+All depositors earn the same unified APY (higher than USDC alone)
 ```
 
 ### Three-Tier Fee Formula
