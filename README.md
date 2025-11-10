@@ -94,25 +94,29 @@ Users deposit USDC or regional stablecoins to earn unified yield, receive SBX to
 - Regional depositors provide direct liquidity (prevent double swaps) → rewarded with USDC withdrawal option
 - USDC depositors benefit from higher unified APY (than USDC alone) → fair compensation
 
-### 6. Off-Chain MM Allocation
+### 6. Flash Loan Vault (Replaces Mock MM Allocation)
 
 - **Dynamic allocation**: Only when pool is balanced (has excess)
-- **30% of excess** goes to MM when USDC ≥ sum(regionals)
-- **Random returns**: Mocked returns (2-8% APY range) set by admin periodically
-- Returns factor into unified APY calculation (weighted average)
+- **30% of excess** goes to flash loan vault when USDC ≥ sum(regionals)
+- **Real use case**: Flash loans for arbitrage, liquidations, and other DeFi operations
+- **Flash loan mechanism**: Borrow USDC, use it, and repay in the same transaction
+- **No fees required**: Flash loans are repaid at face value (any excess is kept as fee)
+- **Reentrancy protection**: Vault tracks `flashed` flag to prevent multiple simultaneous loans
 
 ## Package Information
 
-### Latest Package (Unified Basket with Asymmetric Withdrawal + Migration)
-- **Package ID:** `0x71157d06f6ea5ac0d5f952881126591da1c0d5e3980e9ab9dbf1d08dff989846`
-- **Published:** Latest version with unified basket architecture, asymmetric withdrawal rules, and account migration
-- **Transaction Digest:** `4NsomjHZC6S54ZFjSbQDUt1RJHhSjbHbFtEPS1wtRziC`
-- **Modules:** `chfx`, `tryb`, `sekx`, `sbx`, `sbx_pool`, `usdc`, `jpyc`, `myrc`, `xsgd`
+### Latest Package (Unified Basket with Flash Loan Vault)
+- **Package ID:** `0xf9c589d88c04686711a24f30b1b6e3de21a3bc1c6aa13b87dc5b323b9e122aee`
+- **Published:** Latest version with flash loan vault replacing mock MM allocation
+- **Transaction Digest:** `FS3eMnP7Hfxop4D8szXsPD5kpkPAwVC4jRp5dAyqNZQF`
+- **Network:** IOTA Testnet
+- **Modules:** `chfx`, `tryb`, `sekx`, `sbx`, `sbx_pool`, `usdc`, `flash_vault`, `jpyc`, `myrc`, `xsgd`
 - **Key Features:**
   - **Unified Basket**: All currencies (USDC + regionals) in one pool
   - **Unified APY**: All depositors earn the same APY (higher than USDC alone)
   - **Asymmetric Withdrawal**: Regional depositors can withdraw USDC; USDC depositors cannot
-  - **Updated Allocation**: 30% MM, 50% USDC, 20% regionals
+  - **Flash Loan Vault**: Real flash loan functionality (30% of excess USDC)
+  - **Updated Allocation**: 30% Flash Vault, 50% USDC, 20% regionals
   - **SBX Token Minting**: Actual SBX tokens minted/burned on stake/unstake
   - **Account Migration**: Transfer staking status between accounts
   - **Epoch-Based Yield**: Yield distributed after epoch completion
@@ -121,6 +125,7 @@ Users deposit USDC or regional stablecoins to earn unified yield, receive SBX to
   - Prices queried from API off-chain and passed to contract
 
 ### Previous Packages
+- **Package ID:** `0x71157d06f6ea5ac0d5f952881126591da1c0d5e3980e9ab9dbf1d08dff989846` (Unified Basket with Migration)
 - **Package ID:** `0x7d6fa54ec2a4ae5620967a2129860f5a8a0b4d9849df64f2ae9b5325f3ca7db0` (EUR-focused with 40/60 split)
 - **Package ID:** `0xce5a8930723f277deb6d1b2d583e732b885458cb6452354c502cb70da8f7cff9` (with test_feed_from_state)
 - **Package ID:** `0xca283c3f232d60738aac7003395391846ef0b4e2ec6af1558f5781eec1d9c4ef` (initial Pyth integration)
@@ -219,10 +224,18 @@ All tokens and treasury caps are owned by:
    - Pool state management with balance-based allocation
    - Three-tier fee curve (80%/30% thresholds)
    - Direct A→B swaps (no USD intermediate)
-   - Dynamic MM allocation (30% of excess)
+   - Flash loan vault integration (30% of excess)
    - Deposit/withdraw operations with depth-aware fees
    - **API-based price feeds** - prices passed as parameters
 
+2. **flash_vault.move** - Flash loan vault module
+   - **Flash loan mechanism**: Borrow USDC, use it, repay in same transaction
+   - **Reentrancy protection**: `flashed` flag prevents multiple simultaneous loans
+   - **Receipt system**: Tracks loan details for repayment validation
+   - **Security features**: Zero amount protection, balance validation, state consistency
+   - Shared object design for multi-user access
+   - Admin functions for vault management
+   - **Deployed**: Package ID `0xf9c589d88c04686711a24f30b1b6e3de21a3bc1c6aa13b87dc5b323b9e122aee`
 
 3. **chfx.move, tryb.move, sekx.move, usdc.move** - Token modules
    - Regulated currency creation (EUR-focused tokens)
@@ -234,6 +247,7 @@ All tokens and treasury caps are owned by:
 - **Unified Basket:** All currencies (USDC + regionals) in one pool
 - **Unified APY:** All depositors earn the same APY (higher than USDC alone)
 - **Asymmetric Withdrawal:** Regional depositors can withdraw USDC; USDC depositors cannot
+- **Flash Loan Vault:** Real flash loan functionality replacing mock MM allocation (30% of excess) - **Deployed on IOTA Testnet**
 - **API-Based Price Feeds:** Prices queried off-chain and passed as parameters (no onchain queries)
 - **EUR-Focused Tokens:** CHFX (Swiss Franc), TRYB (Turkish Lira), SEKX (Swedish Krona)
 - **Three-Tier Fee Curve:** Cheap fixed rate (≥80%), linear scaling (30-80%), sudden jump (<30%)
@@ -401,7 +415,65 @@ public entry fun admin_set_fee_params(
     max_fee_bps: u64,
     ctx: &TxContext
 )
+
+// Deposit USDC to flash loan vault (for MM allocation)
+public entry fun admin_deposit_vault_usdc(
+    pool: &mut Pool,
+    vault: &mut FlashVault,
+    coin: Coin<USDC>,
+    ctx: &TxContext
+)
+
+// Withdraw USDC from flash loan vault
+// This is a regular function (not entry) - returns Coin that must be handled in PTB
+public fun admin_withdraw_vault_usdc(
+    pool: &mut Pool,
+    vault: &mut FlashVault,
+    amount: u64,
+    ctx: &mut TxContext
+): Coin<USDC>
 ```
+
+### Flash Loan Functions
+
+```move
+// Create flash loan vault (shared object)
+// Must be called once to initialize the vault
+public entry fun create_vault(ctx: &mut TxContext)
+
+// Flash loan: Borrow USDC from vault
+// Returns: (borrowed_coin, receipt)
+// Must be repaid in the same transaction via repay_flash_loan
+// This is a regular function (not entry) - users must build PTBs to call it
+public fun flash_loan(
+    vault: &mut FlashVault,
+    amount: u64,
+    ctx: &mut TxContext
+): (Coin<USDC>, Receipt)
+
+// Repay flash loan
+// Must repay at least the borrowed amount (can pay more as fee)
+// This is a regular function (not entry) - users must build PTBs to call it
+public fun repay_flash_loan(
+    vault: &mut FlashVault,
+    coin: Coin<USDC>,
+    receipt: Receipt
+)
+
+// Get flash vault balance
+public fun vault_balance(vault: &FlashVault): u64
+
+// Check if vault is currently flashed (loan active)
+public fun vault_is_flashed(vault: &FlashVault): bool
+```
+
+**Flash Loan Usage Pattern:**
+Users must build a Programmable Transaction Block (PTB) that:
+1. Calls `flash_loan()` to borrow USDC and get a receipt
+2. Performs operations with the borrowed USDC (arbitrage, liquidations, etc.)
+3. Calls `repay_flash_loan()` with the USDC (plus any fee) and receipt
+
+The loan must be repaid in the same transaction. Any excess amount paid is kept as a fee by the vault.
 
 ### View Functions
 
@@ -521,13 +593,14 @@ Pyth = "0x23994dd119480ea614f7623520337058dca913cb1bb6e5d8d51c7b067d3ca3bb"
 - **Unified Basket Architecture**: All currencies (USDC + regionals) in one pool
 - **Asymmetric Withdrawal Rules**: Regional depositors can withdraw USDC; USDC depositors cannot
 - **Unified APY**: All depositors earn the same APY (higher than USDC alone)
+- **Flash Loan Vault**: Real flash loan functionality deployed on IOTA Testnet
 - Token creation (CHFX, TRYB, SEKX, USDC) - EUR-focused
 - API-based price feed integration (no onchain queries)
 - Price parameters in all price-sensitive functions
 - Three-tier fee curve (80%/30% thresholds)
 - Direct A→B swaps (no USD intermediate)
 - Balance-based USDC allocation (30/50/20 split)
-- Dynamic MM allocation (30% of excess)
+- Flash loan vault allocation (30% of excess)
 - Unified APY calculation (weighted average)
 - Deposit type tracking (for asymmetric withdrawal enforcement)
 - Package compilation and publishing
@@ -547,7 +620,7 @@ if balance_ratio < 1.0:
 else:
     reserve = sum(regionals)
     excess = USDC - sum(regionals)
-    MM_allocation = excess * 0.3
+    flash_vault_allocation = excess * 0.3  // Flash loan vault
     usdc_allocation = excess * 0.5
     swap_allocation = excess * 0.2 (to unhealthiest regionals)
 ```

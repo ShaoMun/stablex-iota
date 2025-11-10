@@ -4,6 +4,8 @@ module first_package::sbx_pool {
     use iota::transfer;
     use first_package::sbx::{Self, SBX};
     use iota::coin::{Self, Coin, TreasuryCap};
+    use first_package::flash_vault::{Self, FlashVault, Receipt};
+    use first_package::usdc::USDC;
 
     const E_ALREADY_INITIALIZED: u64 = 1;
     const E_NOT_ADMIN: u64 = 2;
@@ -213,6 +215,67 @@ module first_package::sbx_pool {
         pool.usdc_reserve = pool.usdc_reserve - amount;
     }
 
+    /// Admin: Deposit USDC to flash loan vault
+    /// This should be called to deposit the MM allocation (30% of excess) to the vault
+    public entry fun admin_deposit_vault_usdc(
+        pool: &mut Pool,
+        vault: &mut FlashVault,
+        coin: Coin<USDC>,
+        ctx: &TxContext
+    ) {
+        assert!(pool.admin == tx_context::sender(ctx), E_NOT_ADMIN);
+        let amount = coin::value(&coin);
+        flash_vault::deposit_usdc(vault, coin);
+        // Update tracking (vault balance is tracked separately in vault)
+        // mm_reserved_usdc in pool is just for accounting
+    }
+
+    /// Admin: Withdraw USDC from flash loan vault
+    /// This is a regular function (not entry) - returns Coin that must be handled in PTB
+    public fun admin_withdraw_vault_usdc(
+        pool: &mut Pool,
+        vault: &mut FlashVault,
+        amount: u64,
+        ctx: &mut TxContext
+    ): Coin<USDC> {
+        assert!(pool.admin == tx_context::sender(ctx), E_NOT_ADMIN);
+        assert!(amount > 0, E_ZERO_AMOUNT);
+        flash_vault::withdraw_usdc(vault, amount, ctx)
+    }
+
+    /// Flash loan: Borrow USDC from vault
+    /// Returns the borrowed coin and a receipt that must be used to repay
+    /// Must be repaid in the same transaction via repay_flash_loan
+    /// This is a regular function (not entry) - users must build PTBs to call it
+    public fun flash_loan(
+        vault: &mut FlashVault,
+        amount: u64,
+        ctx: &mut TxContext
+    ): (Coin<USDC>, Receipt) {
+        flash_vault::flash(vault, amount, ctx)
+    }
+
+    /// Repay flash loan
+    /// Must repay at least the borrowed amount (can pay more as fee)
+    /// This is a regular function (not entry) - users must build PTBs to call it
+    public fun repay_flash_loan(
+        vault: &mut FlashVault,
+        coin: Coin<USDC>,
+        receipt: Receipt
+    ) {
+        flash_vault::repay_flash(vault, coin, receipt);
+    }
+
+    /// Get flash vault balance
+    public fun vault_balance(vault: &FlashVault): u64 {
+        flash_vault::balance(vault)
+    }
+
+    /// Check if vault is currently flashed (loan active)
+    public fun vault_is_flashed(vault: &FlashVault): bool {
+        flash_vault::is_flashed(vault)
+    }
+
     /// Legacy function - kept for compatibility
     /// Users should use stake functions instead which mint actual SBX tokens
     public entry fun deposit_and_mint(
@@ -294,6 +357,7 @@ module first_package::sbx_pool {
     /// Prices are passed as parameters (queried from API off-chain)
     /// Records staked amount in account status
     /// Mints actual SBX tokens and transfers to user
+    /// MM allocation (30% of excess) is tracked for flash loan vault
     public entry fun stake_usdc(
         account: &mut Account,
         pool: &mut Pool,
@@ -323,10 +387,11 @@ module first_package::sbx_pool {
         // Update USDC reserve (maintains balance with regionals + 50% of excess)
         pool.usdc_reserve = usdc_reserve;
         
-        // Update MM reserved amount (30% of excess)
+        // Update MM reserved amount (30% of excess) - tracked for flash loan vault
         pool.mm_reserved_usdc = pool.mm_reserved_usdc + mm_allocation;
         
         // Note: Auto-swap amounts are advisory; actual swaps happen via market incentives (fees)
+        // Note: MM allocation should be deposited to flash vault via admin_deposit_vault_usdc
     }
 
     /// Legacy function - kept for compatibility
