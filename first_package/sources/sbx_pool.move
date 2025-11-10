@@ -954,8 +954,8 @@ module first_package::sbx_pool {
                               (tryb_weight * (registry.mm_return_tryb_bps as u128)) +
                               (sekx_weight * (registry.mm_return_sekx_bps as u128))) / 10_000u128;
             weighted_mm as u64
-        } else {
-            0u64
+            } else {
+                0u64
         };
         
         // 4. Unified APY = fee APY + MM APY
