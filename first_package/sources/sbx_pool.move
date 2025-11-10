@@ -135,7 +135,7 @@ module first_package::sbx_pool {
             pending_yield_sbx: 0,
             sbx_treasury
         };
-        transfer::public_transfer(pool, tx_context::sender(ctx));
+        transfer::share_object(pool);
     }
 
     /// Admin controls
@@ -185,7 +185,7 @@ module first_package::sbx_pool {
             fee_accumulated_tryb_mu: 0u128,
             fee_accumulated_sekx_mu: 0u128
         };
-        transfer::public_transfer(registry, tx_context::sender(ctx));
+        transfer::share_object(registry);
     }
 
     public entry fun admin_set_whitelist(registry: &mut Registry, chfx: bool, tryb: bool, sekx: bool, ctx: &TxContext) {

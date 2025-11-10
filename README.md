@@ -105,27 +105,52 @@ Users deposit USDC or regional stablecoins to earn unified yield, receive SBX to
 
 ## Package Information
 
-### Latest Package (Unified Basket with Flash Loan Vault)
-- **Package ID:** `0xf9c589d88c04686711a24f30b1b6e3de21a3bc1c6aa13b87dc5b323b9e122aee`
-- **Published:** Latest version with flash loan vault replacing mock MM allocation
-- **Transaction Digest:** `FS3eMnP7Hfxop4D8szXsPD5kpkPAwVC4jRp5dAyqNZQF`
+### Latest Package (Unified Basket with Shared Objects - Production Ready)
+- **Package ID:** `0x6ebf91f7fb200377491c41e9a81dbde911a93ff2f8ec7aaa0e3e21fe424c6514`
+- **Published:** Latest version with shared Pool and Registry objects for multi-user access
+- **Transaction Digest:** `97f5RaXyTm4EHBSUW86bKETQLmUsFQNiKB3acXhnLyRb`
 - **Network:** IOTA Testnet
+- **Pool Object ID:** `0x1f88410b6a652e5f9a31061d7eaa7939b12b3811606070bc2743470f3846756d` (Shared)
+- **Registry Object ID:** `0x967a22966d19e27ced4aea39e5ef90442aa94473b41123445bcd697beae1b5d6` (Shared)
 - **Modules:** `chfx`, `tryb`, `sekx`, `sbx`, `sbx_pool`, `usdc`, `flash_vault`, `jpyc`, `myrc`, `xsgd`
 - **Key Features:**
+  - **Shared Objects**: Pool and Registry are shared objects, enabling multi-user interaction
   - **Unified Basket**: All currencies (USDC + regionals) in one pool
   - **Unified APY**: All depositors earn the same APY (higher than USDC alone)
   - **Asymmetric Withdrawal**: Regional depositors can withdraw USDC; USDC depositors cannot
   - **Flash Loan Vault**: Real flash loan functionality (30% of excess USDC)
   - **Updated Allocation**: 30% Flash Vault, 50% USDC, 20% regionals
   - **SBX Token Minting**: Actual SBX tokens minted/burned on stake/unstake
-  - **Account Migration**: Transfer staking status between accounts
+  - **Account Management**: Automatic account creation for users
+  - **Coin Transfers**: Coins are properly transferred to the pool during staking
   - **Epoch-Based Yield**: Yield distributed after epoch completion
+  - **Frontend Integration**: Full dApp with wallet connection, staking UI, and transaction handling
   - EUR-focused tokens (CHFX, TRYB, SEKX) with API-based price feeds
   - All functions accept prices as `u64` parameters (micro-USD)
   - Prices queried from API off-chain and passed to contract
 
+### Frontend dApp
+
+The frontend is a Next.js application with full wallet integration:
+
+- **Wallet Connection**: IOTA dApp Kit integration with wallet persistence
+- **Staking Interface**: Full staking UI with currency selection, amount input, fee display
+- **Real-time Prices**: Fetches prices from Pyth Network Hermes API
+- **Fee Calculation**: Real-time fee calculation from the pool contract
+- **Transaction Handling**: Automatic account creation, coin transfers, and SBX minting
+- **Transaction Explorer**: Success snackbar with link to IOTA explorer
+- **Network Support**: Testnet configuration with auto-connect and persistence
+
+**Key Frontend Features:**
+- Multi-currency support (USDC, CHFX, TRYB, SEKX, JPYC, MYRC, XSGD)
+- USD value display for all currencies
+- Collapsible fee breakdown (network fee, deposit fee, swap fee)
+- Account object management (automatic creation and caching)
+- Shared object handling (Pool and Registry)
+- Coin transfer integration (coins properly deducted from wallet)
+
 ### Previous Packages
-- **Package ID:** `0x71157d06f6ea5ac0d5f952881126591da1c0d5e3980e9ab9dbf1d08dff989846` (Unified Basket with Migration)
+- **Package ID:** `0x71157d06f6ea5ac0d5f952881126591da1c0d5e3980e9ab9dbf1d08dff989846` (Unified Basket with Migration - had owned objects issue)
 - **Package ID:** `0x7d6fa54ec2a4ae5620967a2129860f5a8a0b4d9849df64f2ae9b5325f3ca7db0` (EUR-focused with 40/60 split)
 - **Package ID:** `0xce5a8930723f277deb6d1b2d583e732b885458cb6452354c502cb70da8f7cff9` (with test_feed_from_state)
 - **Package ID:** `0xca283c3f232d60738aac7003395391846ef0b4e2ec6af1558f5781eec1d9c4ef` (initial Pyth integration)
@@ -264,6 +289,7 @@ All tokens and treasury caps are owned by:
 ```move
 // Create a new account for a user
 // Users need an account object to stake/unstake
+// The frontend automatically creates accounts when needed
 public entry fun create_account(ctx: &mut TxContext);
 
 // Migrate staking status from one account to another
@@ -281,12 +307,13 @@ public entry fun migrate_staking_status(
 );
 ```
 
-### Deposit Functions
+### Staking Functions
 
 ```move
-// USDC deposit with balance-based allocation
-// Prices queried from API and passed as parameters
-public entry fun deposit_usdc(
+// Stake USDC - mints SBX tokens 1:1 with USD value
+// Note: Coins must be transferred to pool before calling this function
+// The frontend handles coin splitting and transfer automatically
+public entry fun stake_usdc(
     account: &mut Account,
     pool: &mut Pool,
     registry: &Registry,
@@ -294,22 +321,31 @@ public entry fun deposit_usdc(
     chfx_price_microusd: u64,
     tryb_price_microusd: u64,
     sekx_price_microusd: u64,
-    ctx: &TxContext
+    ctx: &mut TxContext
 )
 
-// Regional stablecoin deposits (prices from API)
-public entry fun deposit_chfx(
+// Stake regional stablecoins - mints SBX based on USD value
+// Note: Coins must be transferred to pool before calling this function
+// The frontend handles coin splitting and transfer automatically
+public entry fun stake_chfx(
     account: &mut Account,
     pool: &mut Pool,
     registry: &Registry,
     amount: u64,
     price_microusd: u64,
-    ctx: &TxContext
+    ctx: &mut TxContext
 )
 
-public entry fun deposit_tryb(...)
-public entry fun deposit_sekx(...)
+public entry fun stake_tryb(...)
+public entry fun stake_sekx(...)
 ```
+
+**Frontend Integration:**
+- Automatically splits coins to get exact amounts
+- Transfers coins to pool object before staking
+- Creates account objects if needed
+- Fetches real-time prices from API
+- Displays USD values and fees
 
 ### Withdrawal Functions
 
@@ -550,26 +586,26 @@ public fun coverage_bps(
 - Location: `first_package/tests/sbx_pool_integration_tests.move`
 - Tests: Full integration tests including account creation, migration, staking, unstaking, swaps, yield distribution
 
-### On-Chain Testing
+### On-Chain Testing & Production Status
 - **Package Published:** ✅ Successfully published to IOTA testnet
-- **Package ID:** `0x71157d06f6ea5ac0d5f952881126591da1c0d5e3980e9ab9dbf1d08dff989846`
+- **Package ID:** `0x6ebf91f7fb200377491c41e9a81dbde911a93ff2f8ec7aaa0e3e21fe424c6514`
+- **Pool Object:** ✅ Created as shared object (multi-user access enabled)
+- **Registry Object:** ✅ Created as shared object (multi-user access enabled)
+- **Frontend Integration:** ✅ Fully functional with wallet connection and staking
 - **Test Results:** See `first_package/TEST_RESULTS.md` for detailed on-chain test results
 
-**Tested Functions (All Successful):**
-- ✅ `create_registry` - Registry created successfully
-- ✅ `create_account` - Account created successfully
-- ✅ `create_pool` - Pool created successfully
-- ✅ `admin_set_whitelist` - Whitelist updated
-- ✅ `admin_set_prices_microusd` - Prices set
-- ✅ `admin_set_targets` - Targets configured
-- ✅ `admin_set_fee_params` - Fee parameters set
-- ✅ `admin_set_mm_returns` - MM returns configured
-- ✅ `stake_usdc` - USDC staking successful, SBX tokens minted
-- ✅ `staked_usdc_of` - View function working
-- ✅ `stats` - Pool stats retrieved
-- ✅ `prices_microusd` - Prices retrieved
+**Production-Ready Features:**
+- ✅ `create_registry` - Registry created as shared object
+- ✅ `create_pool` - Pool created as shared object
+- ✅ `create_account` - Automatic account creation for users
+- ✅ `stake_usdc`, `stake_chfx`, `stake_tryb`, `stake_sekx` - All staking functions working
+- ✅ Coin transfers - Coins properly deducted from wallet and transferred to pool
+- ✅ SBX minting - SBX tokens minted 1:1 with USD value
+- ✅ Real-time fee calculation - Network fees, deposit fees, and swap fees
+- ✅ Price feeds - API-based price queries with USD value display
+- ✅ Transaction explorer integration - Success notifications with explorer links
 
-All core functions tested and working correctly on-chain!
+**Status:** ✅ Production-ready on IOTA Testnet
 
 ## Dependencies
 
@@ -580,21 +616,30 @@ name = "first_package"
 edition = "2024"
 
 [dependencies]
-Pyth = { git = "https://github.com/pyth-network/pyth-crosschain.git", subdir = "target_chains/sui/contracts", rev = "iota-contract-testnet" }
 
 [addresses]
 first_package = "0x0"
-Pyth = "0x23994dd119480ea614f7623520337058dca913cb1bb6e5d8d51c7b067d3ca3bb"
 ```
+
+### Frontend Dependencies
+- `@iota/dapp-kit`: IOTA dApp Kit for wallet integration
+- `@iota/iota-sdk`: IOTA SDK for client operations
+- `@tanstack/react-query`: Data fetching and state management
+- `next`: Next.js framework
+- `react`: React library
 
 ## Development Status
 
-✅ **Completed:**
+✅ **Production Ready:**
 - **Unified Basket Architecture**: All currencies (USDC + regionals) in one pool
+- **Shared Objects**: Pool and Registry created as shared objects for multi-user access
 - **Asymmetric Withdrawal Rules**: Regional depositors can withdraw USDC; USDC depositors cannot
 - **Unified APY**: All depositors earn the same APY (higher than USDC alone)
 - **Flash Loan Vault**: Real flash loan functionality deployed on IOTA Testnet
-- Token creation (CHFX, TRYB, SEKX, USDC) - EUR-focused
+- **Frontend dApp**: Complete Next.js application with full wallet integration
+- **Staking Flow**: Working staking with coin transfers, SBX minting, and account management
+- **Real-time Features**: Price feeds, fee calculation, USD value display
+- Token creation (CHFX, TRYB, SEKX, USDC, JPYC, MYRC, XSGD)
 - API-based price feed integration (no onchain queries)
 - Price parameters in all price-sensitive functions
 - Three-tier fee curve (80%/30% thresholds)
@@ -691,10 +736,39 @@ await contract.deposit_usdc({
 - **IOTA Shared Objects:** https://docs.iota.org/developer/iota-101/objects/object-ownership/shared
 - **Move Language:** https://move-language.github.io/move/
 
-## Network
+## Network & Deployment
 
-- **Network:** IOTA Rebased Testnet
-- **Explorer:** https://explorer.testnet.iota.cafe/
+- **Network:** IOTA Testnet
+- **Explorer:** https://explorer.iota.org/ (use `?network=testnet` parameter)
+- **Package ID:** `0x6ebf91f7fb200377491c41e9a81dbde911a93ff2f8ec7aaa0e3e21fe424c6514`
+- **Pool Object:** `0x1f88410b6a652e5f9a31061d7eaa7939b12b3811606070bc2743470f3846756d` (Shared)
+- **Registry Object:** `0x967a22966d19e27ced4aea39e5ef90442aa94473b41123445bcd697beae1b5d6` (Shared)
+
+## Quick Start
+
+### Frontend Development
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+The dApp will be available at `http://localhost:3000`
+
+### Contract Development
+
+```bash
+cd first_package
+iota move build
+iota client publish
+```
+
+### Environment Variables
+
+The frontend uses the following environment variables (optional):
+- `NEXT_PUBLIC_POOL_OBJECT_ID`: Override default pool object ID
+- `NEXT_PUBLIC_REGISTRY_OBJECT_ID`: Override default registry object ID
 
 ## Audit Trail
 

@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import CurrencyModal from "@/components/CurrencyModal";
 import AppLayout from "@/components/AppLayout";
 import FAQ from "@/components/FAQ";
+import { useCurrentAccount, ConnectModal } from "@iota/dapp-kit";
 
 type Currency = "USDC" | "CHFX" | "TRYB" | "SEKX";
 
@@ -9,8 +10,11 @@ export default function UnstakePage() {
   const [toCurrency, setToCurrency] = useState<Currency>("USDC");
   const [fromAmount, setFromAmount] = useState<string>("0");
   const [toAmount, setToAmount] = useState<string>("0");
-  const [isWalletConnected, setIsWalletConnected] = useState(false);
   const [isToCurrencyModalOpen, setIsToCurrencyModalOpen] = useState(false);
+  
+  const currentAccount = useCurrentAccount();
+  const isWalletConnected = !!currentAccount;
+  const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
 
   useEffect(() => {
     const amount = parseFloat(fromAmount) || 0;
@@ -19,7 +23,7 @@ export default function UnstakePage() {
   }, [fromAmount, toCurrency]);
 
   const handleConnectWallet = () => {
-    setIsWalletConnected(true);
+    setIsConnectModalOpen(true);
   };
 
   const handleUnstake = () => {
@@ -157,6 +161,13 @@ export default function UnstakePage() {
           setToCurrency(currency);
           setIsToCurrencyModalOpen(false);
         }}
+      />
+
+      {/* Wallet Connection Modal */}
+      <ConnectModal
+        trigger={<button style={{ display: 'none' }} />}
+        open={isConnectModalOpen}
+        onOpenChange={setIsConnectModalOpen}
       />
     </AppLayout>
   );

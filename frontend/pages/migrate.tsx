@@ -1,14 +1,18 @@
 import { useState } from "react";
 import AppLayout from "@/components/AppLayout";
 import FAQ from "@/components/FAQ";
+import { useCurrentAccount, ConnectModal } from "@iota/dapp-kit";
 
 export default function MigratePage() {
-  const [isWalletConnected, setIsWalletConnected] = useState(false);
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "deactivating">("active");
+  
+  const currentAccount = useCurrentAccount();
+  const isWalletConnected = !!currentAccount;
+  const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
 
   const handleConnectWallet = () => {
-    setIsWalletConnected(true);
+    setIsConnectModalOpen(true);
   };
 
   const handleMigrate = () => {
@@ -174,6 +178,13 @@ export default function MigratePage() {
             answer: "No, you must migrate everything at once. All staked amounts (USDC, CHFX, TRYB, SEKX) transfer together in a single operation."
           }
         ]}
+      />
+
+      {/* Wallet Connection Modal */}
+      <ConnectModal
+        trigger={<button style={{ display: 'none' }} />}
+        open={isConnectModalOpen}
+        onOpenChange={setIsConnectModalOpen}
       />
     </AppLayout>
   );
