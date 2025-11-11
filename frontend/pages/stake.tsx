@@ -35,19 +35,19 @@ export default function StakePage() {
   const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
   const client = useIotaClient();
   const [isStaking, setIsStaking] = useState(false);
-  const [snackbar, setSnackbar] = useState<{ show: boolean; digest?: string }>({ show: false });
+  const [snackbar, setSnackbar] = useState<{ show: boolean; digest?: string; error?: boolean; message?: string }>({ show: false });
   const snackbarTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Contract addresses - Updated after redeployment with shared objects
-  const POOL_PACKAGE_ID = '0x6ebf91f7fb200377491c41e9a81dbde911a93ff2f8ec7aaa0e3e21fe424c6514';
-  // Pool and Registry created as shared objects
-  const POOL_OBJECT_ID = process.env.NEXT_PUBLIC_POOL_OBJECT_ID || '0x1f88410b6a652e5f9a31061d7eaa7939b12b3811606070bc2743470f3846756d';
-  const REGISTRY_OBJECT_ID = process.env.NEXT_PUBLIC_REGISTRY_OBJECT_ID || '0x967a22966d19e27ced4aea39e5ef90442aa94473b41123445bcd697beae1b5d6';
+  const POOL_PACKAGE_ID = '0xe3a167fa29d171fc79d0b76534fcd8fa86e719177e732373fb9e004076e16a0f';
+  // Pool and Registry created as shared objects - Updated Dec 2024 with coin transfer logic
+  const POOL_OBJECT_ID = process.env.NEXT_PUBLIC_POOL_OBJECT_ID || "0xb107e62bfcfe4a1492212d3039e357aa443eba350a91963f2e74214e10c7e703";
+  const REGISTRY_OBJECT_ID = process.env.NEXT_PUBLIC_REGISTRY_OBJECT_ID || "0x4cdef4b7bb87bd7abbae95dc8eb034fc88ab0ea78f252d333f2dcecb22e623be";
 
   const { mutate: signAndExecuteTransaction, mutateAsync: signAndExecuteTransactionAsync } = useSignAndExecuteTransaction({
     onSuccess: (result) => {
       setIsStaking(false);
-      setSnackbar({ show: true, digest: result.digest });
+      setSnackbar({ show: true, digest: result.digest, error: false });
       // Auto-hide snackbar after 5 seconds
       if (snackbarTimeoutRef.current) {
         clearTimeout(snackbarTimeoutRef.current);
@@ -57,9 +57,57 @@ export default function StakePage() {
       }, 5000);
     },
     onError: (error) => {
-      console.error('Transaction failed:', error);
-      setIsStaking(false);
-      alert(`Transaction failed: ${error.message}`);
+      try {
+        console.error('Transaction failed:', error);
+        setIsStaking(false);
+        
+        // Safely extract error message
+        let errorMessage = 'Unknown error';
+        try {
+          if (error?.message) {
+            errorMessage = String(error.message);
+          } else if (typeof error === 'string') {
+            errorMessage = error;
+          } else if (error?.toString) {
+            errorMessage = error.toString();
+          }
+        } catch (e) {
+          // If we can't extract message, use default
+          errorMessage = 'Transaction failed';
+        }
+        
+        // Check if user rejected the transaction
+        const errorLower = errorMessage.toLowerCase();
+        const isUserRejection = errorLower.includes('rejected') || 
+                               errorLower.includes('user') ||
+                               errorLower.includes('denied') ||
+                               errorLower.includes('cancelled') ||
+                               errorLower.includes('cancel');
+        
+        const displayMessage = isUserRejection 
+          ? 'Transaction cancelled'
+          : `Transaction failed: ${errorMessage}`;
+        
+        setSnackbar({ show: true, error: true, message: displayMessage });
+        // Auto-hide snackbar after 5 seconds
+        if (snackbarTimeoutRef.current) {
+          clearTimeout(snackbarTimeoutRef.current);
+        }
+        snackbarTimeoutRef.current = setTimeout(() => {
+          setSnackbar({ show: false });
+        }, 5000);
+      } catch (handlerError) {
+        // If error handler itself fails, just log and set a simple message
+        console.error('Error in error handler:', handlerError);
+        setIsStaking(false);
+        setSnackbar({ show: true, error: true, message: 'Transaction cancelled' });
+        if (snackbarTimeoutRef.current) {
+          clearTimeout(snackbarTimeoutRef.current);
+        }
+        snackbarTimeoutRef.current = setTimeout(() => {
+          setSnackbar({ show: false });
+        }, 5000);
+      }
     },
   });
 
@@ -241,8 +289,13 @@ export default function StakePage() {
   };
 
   const handleStake = async () => {
-    if (!currentAccount || !client) {
+    if (!currentAccount) {
       alert("Please connect your wallet first");
+      return;
+    }
+
+    if (!client) {
+      alert("IOTA client not initialized. Please refresh the page.");
       return;
     }
 
@@ -278,12 +331,12 @@ export default function StakePage() {
 
       const [chfxPriceMu, trybPriceMu, sekxPriceMu] = await Promise.all(pricePromises);
 
-      // Get coin type for the selected currency
+      // Get coin type for the selected currency - Updated with new package ID
       const currencyInfo: Record<Currency, { coinType: string }> = {
         USDC: { coinType: "0xa5afd11d15dfa90e5ac47ac1a2a74b810b6d0d3c00df8c35c33b90c44e32931d::usdc::USDC" },
-        CHFX: { coinType: "0x7d6fa54ec2a4ae5620967a2129860f5a8a0b4d9849df64f2ae9b5325f3ca7db0::chfx::CHFX" },
-        TRYB: { coinType: "0x7d6fa54ec2a4ae5620967a2129860f5a8a0b4d9849df64f2ae9b5325f3ca7db0::tryb::TRYB" },
-        SEKX: { coinType: "0x7d6fa54ec2a4ae5620967a2129860f5a8a0b4d9849df64f2ae9b5325f3ca7db0::sekx::SEKX" },
+        CHFX: { coinType: "0xe3a167fa29d171fc79d0b76534fcd8fa86e719177e732373fb9e004076e16a0f::chfx::CHFX" },
+        TRYB: { coinType: "0xe3a167fa29d171fc79d0b76534fcd8fa86e719177e732373fb9e004076e16a0f::tryb::TRYB" },
+        SEKX: { coinType: "0xe3a167fa29d171fc79d0b76534fcd8fa86e719177e732373fb9e004076e16a0f::sekx::SEKX" },
         JPYC: { coinType: "0xa5afd11d15dfa90e5ac47ac1a2a74b810b6d0d3c00df8c35c33b90c44e32931d::jpyc::JPYC" },
         MYRC: { coinType: "0xa5afd11d15dfa90e5ac47ac1a2a74b810b6d0d3c00df8c35c33b90c44e32931d::myrc::MYRC" },
         XSGD: { coinType: "0xa5afd11d15dfa90e5ac47ac1a2a74b810b6d0d3c00df8c35c33b90c44e32931d::xsgd::XSGD" },
@@ -297,7 +350,26 @@ export default function StakePage() {
       });
 
       if (!coins || coins.data.length === 0) {
-        throw new Error(`No ${selectedCurrency} coins found in your wallet`);
+        // Check if user has coins from old package
+        const oldPackageId = '0x6bb0ab2db1ff01f7cdb754ef1c459cd300695afcc4a8e6b8d1ab537eb0d30803';
+        const oldCoinType = coinType.replace(POOL_PACKAGE_ID, oldPackageId);
+        const oldCoins = await client.getCoins({
+          owner: currentAccount.address,
+          coinType: oldCoinType,
+        });
+        
+        if (oldCoins && oldCoins.data.length > 0) {
+          throw new Error(
+            `You have ${selectedCurrency} coins from the old package. ` +
+            `Please get new ${selectedCurrency} coins from the new package (${POOL_PACKAGE_ID.slice(0, 10)}...). ` +
+            `The old coins are not compatible with the updated contract.`
+          );
+        }
+        
+        throw new Error(
+          `No ${selectedCurrency} coins found in your wallet. ` +
+          `Please ensure you have ${selectedCurrency} coins from the new package (${POOL_PACKAGE_ID.slice(0, 10)}...).`
+        );
       }
 
       // Find or create account object
@@ -545,20 +617,87 @@ export default function StakePage() {
 
       // Query Pool and Registry objects to get their metadata
       // The Pool should be a shared object, but if it was created as owned, we have an issue
-      const [poolObj, registryObj] = await Promise.all([
-        client.getObject({
-          id: POOL_OBJECT_ID,
-          options: { showOwner: true, showType: true, showPreviousTransaction: true },
-        }).catch(() => null),
-        client.getObject({
-          id: REGISTRY_OBJECT_ID,
-          options: { showOwner: true, showType: true, showPreviousTransaction: true },
-        }).catch(() => null),
-      ]);
+      let poolObj, registryObj;
+      try {
+        console.log('Fetching Pool object:', POOL_OBJECT_ID);
+        console.log('Fetching Registry object:', REGISTRY_OBJECT_ID);
+        
+        [poolObj, registryObj] = await Promise.all([
+          client.getObject({
+            id: POOL_OBJECT_ID,
+            options: { showOwner: true, showType: true, showPreviousTransaction: true },
+          }),
+          client.getObject({
+            id: REGISTRY_OBJECT_ID,
+            options: { showOwner: true, showType: true, showPreviousTransaction: true },
+          }),
+        ]);
+        
+        console.log('Pool object response:', poolObj);
+        console.log('Registry object response:', registryObj);
+      } catch (error: any) {
+        console.error('Error fetching Pool/Registry objects:', error);
+        console.error('Error details:', {
+          message: error?.message,
+          code: error?.code,
+          cause: error?.cause,
+          stack: error?.stack,
+        });
+        throw new Error(
+          `Failed to fetch Pool or Registry objects: ${error?.message || 'Unknown error'}. ` +
+          `Pool ID: ${POOL_OBJECT_ID}, Registry ID: ${REGISTRY_OBJECT_ID}. ` +
+          `Please check your network connection and ensure the objects exist on testnet. ` +
+          `Error details: ${JSON.stringify(error)}`
+        );
+      }
+
+      // Check if objects exist - handle both response formats
+      const poolData = poolObj?.data || ((poolObj as any)?.content?.dataType === 'moveObject' ? poolObj : null);
+      const registryData = registryObj?.data || ((registryObj as any)?.content?.dataType === 'moveObject' ? registryObj : null);
+
+      if (!poolData) {
+        console.error('Pool object data is missing. Full response:', poolObj);
+        throw new Error(
+          `Pool object not found or invalid: ${POOL_OBJECT_ID}. ` +
+          `Response: ${JSON.stringify(poolObj)}. ` +
+          `Please ensure the pool has been created on testnet. ` +
+          `You can verify by running: iota client object ${POOL_OBJECT_ID}`
+        );
+      }
+
+      if (!registryData) {
+        console.error('Registry object data is missing. Full response:', registryObj);
+        throw new Error(
+          `Registry object not found or invalid: ${REGISTRY_OBJECT_ID}. ` +
+          `Response: ${JSON.stringify(registryObj)}. ` +
+          `Please ensure the registry has been created on testnet. ` +
+          `You can verify by running: iota client object ${REGISTRY_OBJECT_ID}`
+        );
+      }
+
+      // Check if objects are from the correct package
+      const poolType = (poolData as any)?.type || (poolData as any)?.objectType || (poolData as any)?.content?.type || '';
+      const registryType = (registryData as any)?.type || (registryData as any)?.objectType || (registryData as any)?.content?.type || '';
+
+      if (!poolType.includes(POOL_PACKAGE_ID)) {
+        throw new Error(
+          `Pool object is from a different package. ` +
+          `Pool type: ${poolType}, Expected package: ${POOL_PACKAGE_ID}. ` +
+          `The pool needs to be recreated with the new package. Please contact the admin.`
+        );
+      }
+
+      if (!registryType.includes(POOL_PACKAGE_ID)) {
+        throw new Error(
+          `Registry object is from a different package. ` +
+          `Registry type: ${registryType}, Expected package: ${POOL_PACKAGE_ID}. ` +
+          `The registry needs to be recreated with the new package. Please contact the admin.`
+        );
+      }
 
       // Check if objects are shared and get their metadata
-      const poolOwner = (poolObj?.data as any)?.owner;
-      const registryOwner = (registryObj?.data as any)?.owner;
+      const poolOwner = (poolData as any)?.owner;
+      const registryOwner = (registryData as any)?.owner;
       const isPoolShared = poolOwner && typeof poolOwner === 'object' && 'Shared' in poolOwner;
       const isRegistryShared = registryOwner && typeof registryOwner === 'object' && 'Shared' in registryOwner;
       
@@ -603,30 +742,25 @@ export default function StakePage() {
       // The SDK will automatically resolve the object type and mutability based on the function signature
       const accountRef = txb.object(accountObjectId);
       
-      // Split coins and transfer them to the pool
-      // The contract expects coins to be transferred to the pool before staking
-      // We'll split the exact amount and transfer it to the pool object
-      const firstCoin = txb.object(coinObjects[0]);
-      
-      // Split the exact amount needed (if not using the whole coin)
-      if (coinObjects.length === 1 && amountsToSplit[0] === BigInt(coins.data.find(c => c.coinObjectId === coinObjects[0])?.balance || 0)) {
-        // Using the whole coin - transfer it directly to the pool
-        txb.transferObjects([firstCoin], POOL_OBJECT_ID);
-      } else {
-        // Split the exact amount and transfer the split coin to the pool
-        // splitCoins returns the transaction builder, and creates new coin objects
-        // The split coins are available as transaction results that we can reference
-        txb.splitCoins(firstCoin, [amountMicro]);
-        // Reference the first result from the splitCoins command (the split coin)
-        // In IOTA/Sui, we use Result index to reference command outputs
-        const splitCoinRef = { $kind: 'NestedResult' as const, NestedResult: [0, 0] };
-        txb.transferObjects([splitCoinRef as any], POOL_OBJECT_ID);
-      }
+      // Deposit fee: 0.1% = 10 basis points
+      const depositFeeBps = 10;
       
       if (selectedCurrency === 'USDC') {
-        // Stake USDC
-        // Note: The contract function takes amount: u64, not a Coin
-        // Coins might be handled through transaction inputs or a different mechanism
+        // Stake USDC - contract takes amount: u64 (not a Coin)
+        // For USDC, we still need to transfer coins to the pool since the function doesn't consume a coin
+        const firstCoin = txb.object(coinObjects[0]);
+        
+        // Split the exact amount needed (if not using the whole coin)
+        if (coinObjects.length === 1 && amountsToSplit[0] === BigInt(coins.data.find(c => c.coinObjectId === coinObjects[0])?.balance || 0)) {
+          // Using the whole coin - transfer it directly to the pool
+          txb.transferObjects([firstCoin], POOL_OBJECT_ID);
+        } else {
+          // Split the exact amount and transfer the split coin to the pool
+          txb.splitCoins(firstCoin, [amountMicro]);
+          const splitCoinRef = { $kind: 'NestedResult' as const, NestedResult: [0, 0] };
+          txb.transferObjects([splitCoinRef as any], POOL_OBJECT_ID);
+        }
+        
         txb.moveCall({
           target: `${POOL_PACKAGE_ID}::sbx_pool::stake_usdc`,
           arguments: [
@@ -637,10 +771,24 @@ export default function StakePage() {
             txb.pure.u64(Math.floor(chfxPriceMu)), // chfx_price_microusd
             txb.pure.u64(Math.floor(trybPriceMu)), // tryb_price_microusd
             txb.pure.u64(Math.floor(sekxPriceMu)), // sekx_price_microusd
+            txb.pure.u64(depositFeeBps), // deposit_fee_bps
           ],
         });
       } else if (selectedCurrency === 'CHFX') {
-        // Stake CHFX
+        // Stake CHFX - contract expects Coin<CHFX> as argument
+        // Split coins and pass the Coin object directly to the function
+        const firstCoin = txb.object(coinObjects[0]);
+        let coinRef: any;
+        
+        if (coinObjects.length === 1 && amountsToSplit[0] === BigInt(coins.data.find(c => c.coinObjectId === coinObjects[0])?.balance || 0)) {
+          // Using the whole coin - pass it directly
+          coinRef = firstCoin;
+        } else {
+          // Split the exact amount needed
+          txb.splitCoins(firstCoin, [amountMicro]);
+          coinRef = { $kind: 'NestedResult' as const, NestedResult: [0, 0] };
+        }
+        
         const priceMu = Math.floor(currencyPrice * 1_000_000);
         
         txb.moveCall({
@@ -649,12 +797,23 @@ export default function StakePage() {
             accountRef, // account
             poolRef, // pool
             registryRef, // registry
-            txb.pure.u64(amountMicro), // amount
+            coinRef, // coin: Coin<CHFX> - the function will add it to pool reserves
             txb.pure.u64(priceMu), // price_microusd
+            txb.pure.u64(depositFeeBps), // deposit_fee_bps
           ],
         });
       } else if (selectedCurrency === 'TRYB') {
-        // Stake TRYB
+        // Stake TRYB - contract expects Coin<TRYB> as argument
+        const firstCoin = txb.object(coinObjects[0]);
+        let coinRef: any;
+        
+        if (coinObjects.length === 1 && amountsToSplit[0] === BigInt(coins.data.find(c => c.coinObjectId === coinObjects[0])?.balance || 0)) {
+          coinRef = firstCoin;
+        } else {
+          txb.splitCoins(firstCoin, [amountMicro]);
+          coinRef = { $kind: 'NestedResult' as const, NestedResult: [0, 0] };
+        }
+        
         const priceMu = Math.floor(currencyPrice * 1_000_000);
         
         txb.moveCall({
@@ -663,12 +822,23 @@ export default function StakePage() {
             accountRef, // account
             poolRef, // pool
             registryRef, // registry
-            txb.pure.u64(amountMicro), // amount
+            coinRef, // coin: Coin<TRYB> - the function will add it to pool reserves
             txb.pure.u64(priceMu), // price_microusd
+            txb.pure.u64(depositFeeBps), // deposit_fee_bps
           ],
         });
       } else if (selectedCurrency === 'SEKX') {
-        // Stake SEKX
+        // Stake SEKX - contract expects Coin<SEKX> as argument
+        const firstCoin = txb.object(coinObjects[0]);
+        let coinRef: any;
+        
+        if (coinObjects.length === 1 && amountsToSplit[0] === BigInt(coins.data.find(c => c.coinObjectId === coinObjects[0])?.balance || 0)) {
+          coinRef = firstCoin;
+        } else {
+          txb.splitCoins(firstCoin, [amountMicro]);
+          coinRef = { $kind: 'NestedResult' as const, NestedResult: [0, 0] };
+        }
+        
         const priceMu = Math.floor(currencyPrice * 1_000_000);
         
         txb.moveCall({
@@ -677,8 +847,9 @@ export default function StakePage() {
             accountRef, // account
             poolRef, // pool
             registryRef, // registry
-            txb.pure.u64(amountMicro), // amount
+            coinRef, // coin: Coin<SEKX> - the function will add it to pool reserves
             txb.pure.u64(priceMu), // price_microusd
+            txb.pure.u64(depositFeeBps), // deposit_fee_bps
           ],
         });
       } else {
@@ -693,19 +864,83 @@ export default function StakePage() {
       // 
       // Note: We pass the Transaction builder, not a built transaction.
       // The hook needs the builder to properly resolve object types during dry run.
-      signAndExecuteTransaction({
-        transaction: txb as any, // Type workaround for SDK version mismatch between packages
-      });
+      try {
+        signAndExecuteTransaction({
+          transaction: txb as any, // Type workaround for SDK version mismatch between packages
+        });
+      } catch (syncError: any) {
+        // Catch any synchronous errors (shouldn't happen, but just in case)
+        console.error('Synchronous error in signAndExecuteTransaction:', syncError);
+        setIsStaking(false);
+        
+        const errorMessage = syncError?.message?.toLowerCase() || '';
+        const isUserRejection = errorMessage.includes('rejected') || 
+                               errorMessage.includes('user') ||
+                               errorMessage.includes('denied') ||
+                               errorMessage.includes('cancelled') ||
+                               errorMessage.includes('cancel');
+        
+        setSnackbar({ 
+          show: true, 
+          error: true, 
+          message: isUserRejection ? 'Transaction cancelled' : `Transaction failed: ${syncError?.message || 'Unknown error'}` 
+        });
+        if (snackbarTimeoutRef.current) {
+          clearTimeout(snackbarTimeoutRef.current);
+        }
+        snackbarTimeoutRef.current = setTimeout(() => {
+          setSnackbar({ show: false });
+        }, 5000);
+      }
     } catch (error: any) {
-      console.error('Error building transaction:', error);
-      setIsStaking(false);
-      alert(`Failed to build transaction: ${error.message}`);
+      try {
+        console.error('Error building transaction:', error);
+        setIsStaking(false);
+        
+        // Safely extract error message
+        let errorMessage = 'Unknown error';
+        try {
+          if (error?.message) {
+            errorMessage = String(error.message);
+          } else if (typeof error === 'string') {
+            errorMessage = error;
+          } else if (error?.toString) {
+            errorMessage = error.toString();
+          }
+        } catch (e) {
+          errorMessage = 'Failed to build transaction';
+        }
+        
+        setSnackbar({ 
+          show: true, 
+          error: true, 
+          message: `Failed to build transaction: ${errorMessage}` 
+        });
+        // Auto-hide snackbar after 5 seconds
+        if (snackbarTimeoutRef.current) {
+          clearTimeout(snackbarTimeoutRef.current);
+        }
+        snackbarTimeoutRef.current = setTimeout(() => {
+          setSnackbar({ show: false });
+        }, 5000);
+      } catch (handlerError) {
+        // If error handler itself fails, just set a simple message
+        console.error('Error in error handler:', handlerError);
+        setIsStaking(false);
+        setSnackbar({ show: true, error: true, message: 'Failed to build transaction' });
+        if (snackbarTimeoutRef.current) {
+          clearTimeout(snackbarTimeoutRef.current);
+        }
+        snackbarTimeoutRef.current = setTimeout(() => {
+          setSnackbar({ show: false });
+        }, 5000);
+      }
     }
   };
 
   const handleSnackbarClick = () => {
-    if (snackbar.digest) {
-      // Open IOTA explorer
+    if (snackbar.digest && !snackbar.error) {
+      // Open IOTA explorer for successful transactions
       window.open(`https://explorer.iota.org/transaction/${snackbar.digest}?network=testnet`, '_blank', 'noopener,noreferrer');
     }
   };
@@ -948,11 +1183,11 @@ export default function StakePage() {
           },
           {
             question: "What is SBX token?",
-            answer: "SBX is your staking receipt. 1 SBX = 1 USD. When you stake, you get SBX tokens representing your share. Your SBX amount grows automatically as you earn yield."
+            answer: "SBX is your staking receipt. 1 SBX = 1 USDC. When you stake, you get SBX tokens representing your share. Your SBX amount grows automatically as you earn yield."
           },
           {
             question: "Can I deposit any stablecoin?",
-            answer: "Yes! Deposit USDC, CHFX, TRYB, or SEKX. All go into the same pool and earn the same APY. Your deposit converts to SBX tokens at 1:1 USD value."
+            answer: "Yes! Deposit USDC, CHFX, TRYB, or SEKX. All go into the same pool and earn the same APY. Your deposit converts to SBX tokens at 1:1 USDC value."
           },
           {
             question: "How does the unified yield work?",
@@ -980,29 +1215,44 @@ export default function StakePage() {
             onOpenChange={setIsConnectModalOpen}
           />
 
-          {/* Success Snackbar */}
+          {/* Success/Error Snackbar */}
           {snackbar.show && (
             <div
-              onClick={handleSnackbarClick}
-              className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 cursor-pointer animate-in slide-in-from-bottom-5"
+              onClick={snackbar.error ? undefined : handleSnackbarClick}
+              className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-bottom-5 ${snackbar.error ? '' : 'cursor-pointer'}`}
             >
               <div
                 className="px-6 py-3 rounded-xl backdrop-blur-xl border border-white/20 shadow-lg transition-all hover:scale-105"
-                style={{
+                style={snackbar.error ? {
+                  background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.9) 0%, rgba(220, 38, 38, 0.9) 100%)',
+                  boxShadow: '0 8px 30px rgba(239, 68, 68, 0.4)',
+                } : {
                   background: 'linear-gradient(135deg, rgba(34, 197, 94, 0.9) 0%, rgba(22, 163, 74, 0.9) 100%)',
                   boxShadow: '0 8px 30px rgba(34, 197, 94, 0.4)',
                 }}
               >
                 <div className="flex items-center gap-3">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-white">
-                    <polyline points="20 6 9 17 4 12"></polyline>
-                  </svg>
-                  <span className="text-white font-medium text-sm">Transaction successful</span>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-white/80">
-                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
-                    <polyline points="15 3 21 3 21 9"></polyline>
-                    <line x1="10" y1="14" x2="21" y2="3"></line>
-                  </svg>
+                  {snackbar.error ? (
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-white">
+                      <circle cx="12" cy="12" r="10"></circle>
+                      <line x1="12" y1="8" x2="12" y2="12"></line>
+                      <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                    </svg>
+                  ) : (
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-white">
+                      <polyline points="20 6 9 17 4 12"></polyline>
+                    </svg>
+                  )}
+                  <span className="text-white font-medium text-sm">
+                    {snackbar.error ? (snackbar.message || 'Transaction failed') : 'Transaction successful'}
+                  </span>
+                  {!snackbar.error && (
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-white/80">
+                      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                      <polyline points="15 3 21 3 21 9"></polyline>
+                      <line x1="10" y1="14" x2="21" y2="3"></line>
+                    </svg>
+                  )}
                 </div>
               </div>
             </div>

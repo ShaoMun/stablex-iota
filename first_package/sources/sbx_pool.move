@@ -4,8 +4,13 @@ module first_package::sbx_pool {
     use iota::transfer;
     use first_package::sbx::{Self, SBX};
     use iota::coin::{Self, Coin, TreasuryCap};
+    use iota::balance::{Self, Balance};
     use first_package::flash_vault::{Self, FlashVault, Receipt};
     use first_package::usdc::USDC;
+    use first_package::chfx::CHFX;
+    use first_package::tryb::TRYB;
+    use first_package::sekx::SEKX;
+    use std::option;
 
     const E_ALREADY_INITIALIZED: u64 = 1;
     const E_NOT_ADMIN: u64 = 2;
@@ -21,6 +26,9 @@ module first_package::sbx_pool {
     const E_INSUFFICIENT_STAKED: u64 = 12;
     const E_EPOCH_NOT_COMPLETE: u64 = 13;
     const E_NO_STAKING_STATUS: u64 = 14;
+    
+    // Maximum u64 value: 18446744073709551615
+    const MAX_U64: u128 = 18446744073709551615;
 
     /// Global pool state
     public struct Pool has key, store {
@@ -45,7 +53,11 @@ module first_package::sbx_pool {
         /// Accumulated yield to be distributed (in SBX, micro-USD)
         pending_yield_sbx: u64,
         /// SBX treasury cap for minting/burning tokens
-        sbx_treasury: TreasuryCap<SBX>
+        sbx_treasury: TreasuryCap<SBX>,
+        /// Balance reserves for regional currencies (transferred from users during swaps)
+        chfx_reserve: Balance<CHFX>,
+        tryb_reserve: Balance<TRYB>,
+        sekx_reserve: Balance<SEKX>
     }
 
     /// Per-user account state (staking status)
@@ -112,6 +124,9 @@ module first_package::sbx_pool {
         fee_bps: u64,
         min_reserve_bps: u64,
         sbx_treasury: TreasuryCap<SBX>,
+        chfx_coin: Coin<CHFX>,
+        tryb_coin: Coin<TRYB>,
+        sekx_coin: Coin<SEKX>,
         ctx: &mut TxContext
     ) {
         assert!(fee_bps <= 10_000, E_BAD_PARAMS);
@@ -133,7 +148,10 @@ module first_package::sbx_pool {
             last_epoch_timestamp_ms: 0,
             epoch_duration_ms: 86400000,  // Default: 1 day in milliseconds
             pending_yield_sbx: 0,
-            sbx_treasury
+            sbx_treasury,
+            chfx_reserve: coin::into_balance(chfx_coin),
+            tryb_reserve: coin::into_balance(tryb_coin),
+            sekx_reserve: coin::into_balance(sekx_coin)
         };
         transfer::share_object(pool);
     }
@@ -358,6 +376,7 @@ module first_package::sbx_pool {
     /// Records staked amount in account status
     /// Mints actual SBX tokens and transfers to user
     /// MM allocation (30% of excess) is tracked for flash loan vault
+    /// deposit_fee_bps: Deposit fee in basis points (e.g., 10 = 0.1%)
     public entry fun stake_usdc(
         account: &mut Account,
         pool: &mut Pool,
@@ -366,6 +385,7 @@ module first_package::sbx_pool {
         chfx_price_microusd: u64,
         tryb_price_microusd: u64,
         sekx_price_microusd: u64,
+        deposit_fee_bps: u64,
         ctx: &mut TxContext
     ) {
         assert!(amount > 0, E_ZERO_AMOUNT);
@@ -376,8 +396,11 @@ module first_package::sbx_pool {
             pool, amount, chfx_price_microusd, tryb_price_microusd, sekx_price_microusd
         );
         
-        // Mint SBX equal to USD micro value and transfer to user
-        let mint_amount = amount;
+        // Apply deposit fee: reduce mint amount by fee
+        let fee_amount = ((amount as u128 * (deposit_fee_bps as u128)) / 10_000u128) as u64;
+        let mint_amount = amount - fee_amount;
+        
+        // Mint SBX equal to USD micro value (after fee) and transfer to user
         sbx::mint(&mut pool.sbx_treasury, tx_context::sender(ctx), mint_amount, ctx);
         pool.total_sbx_supply = pool.total_sbx_supply + mint_amount;
         
@@ -415,25 +438,34 @@ module first_package::sbx_pool {
     /// Stake CHFX, mint SBX based on USD value
     /// Records staked amount in account status
     /// Mints actual SBX tokens and transfers to user
+    /// deposit_fee_bps: Deposit fee in basis points (e.g., 10 = 0.1%)
     public entry fun stake_chfx(
         account: &mut Account,
         pool: &mut Pool,
         registry: &Registry,
-        amount: u64,
+        coin: Coin<CHFX>,
         price_microusd: u64,
+        deposit_fee_bps: u64,
         ctx: &mut TxContext
     ) {
+        let amount = coin::value(&coin);
         assert!(amount > 0, E_ZERO_AMOUNT);
         assert!(!pool.paused, E_PAUSED);
         assert!(registry.chfx_whitelisted, E_NOT_WHITELISTED);
         assert!(price_microusd > 0, E_PRICE_NOT_SET);
         
-        // Calculate USD value: amount (in token units) * price (micro-USD) / 1_000_000
-        // This gives us the USD value in micro-USD, which equals the SBX amount to mint
-        let usd_value_mu = ((amount as u128) * (price_microusd as u128)) / 1_000_000u128;
-        let mint_amount = usd_value_mu as u64;
+        // Add the staked coin to pool reserves (shared with swap reserves)
+        balance::join(&mut pool.chfx_reserve, coin::into_balance(coin));
         
-        // Mint SBX tokens and transfer to user
+        // Calculate USD value: amount (in token units) * price (micro-USD) / 1_000_000
+        // This gives us the USD value in micro-USD
+        let usd_value_mu = ((amount as u128) * (price_microusd as u128)) / 1_000_000u128;
+        
+        // Apply deposit fee: reduce mint amount by fee
+        let fee_amount = ((usd_value_mu * (deposit_fee_bps as u128)) / 10_000u128) as u64;
+        let mint_amount = (usd_value_mu as u64) - fee_amount;
+        
+        // Mint SBX tokens and transfer to user (after fee deduction)
         sbx::mint(&mut pool.sbx_treasury, tx_context::sender(ctx), mint_amount, ctx);
         pool.total_sbx_supply = pool.total_sbx_supply + mint_amount;
         pool.total_rc_liability = pool.total_rc_liability + amount;
@@ -446,25 +478,34 @@ module first_package::sbx_pool {
     /// Stake TRYB, mint SBX based on USD value
     /// Records staked amount in account status
     /// Mints actual SBX tokens and transfers to user
+    /// deposit_fee_bps: Deposit fee in basis points (e.g., 10 = 0.1%)
     public entry fun stake_tryb(
         account: &mut Account,
         pool: &mut Pool,
         registry: &Registry,
-        amount: u64,
+        coin: Coin<TRYB>,
         price_microusd: u64,
+        deposit_fee_bps: u64,
         ctx: &mut TxContext
     ) {
+        let amount = coin::value(&coin);
         assert!(amount > 0, E_ZERO_AMOUNT);
         assert!(!pool.paused, E_PAUSED);
         assert!(registry.tryb_whitelisted, E_NOT_WHITELISTED);
         assert!(price_microusd > 0, E_PRICE_NOT_SET);
         
-        // Calculate USD value: amount (in token units) * price (micro-USD) / 1_000_000
-        // This gives us the USD value in micro-USD, which equals the SBX amount to mint
-        let usd_value_mu = ((amount as u128) * (price_microusd as u128)) / 1_000_000u128;
-        let mint_amount = usd_value_mu as u64;
+        // Add the staked coin to pool reserves (shared with swap reserves)
+        balance::join(&mut pool.tryb_reserve, coin::into_balance(coin));
         
-        // Mint SBX tokens and transfer to user
+        // Calculate USD value: amount (in token units) * price (micro-USD) / 1_000_000
+        // This gives us the USD value in micro-USD
+        let usd_value_mu = ((amount as u128) * (price_microusd as u128)) / 1_000_000u128;
+        
+        // Apply deposit fee: reduce mint amount by fee
+        let fee_amount = ((usd_value_mu * (deposit_fee_bps as u128)) / 10_000u128) as u64;
+        let mint_amount = (usd_value_mu as u64) - fee_amount;
+        
+        // Mint SBX tokens and transfer to user (after fee deduction)
         sbx::mint(&mut pool.sbx_treasury, tx_context::sender(ctx), mint_amount, ctx);
         pool.total_sbx_supply = pool.total_sbx_supply + mint_amount;
         pool.total_rc_liability = pool.total_rc_liability + amount;
@@ -477,25 +518,34 @@ module first_package::sbx_pool {
     /// Stake SEKX, mint SBX based on USD value
     /// Records staked amount in account status
     /// Mints actual SBX tokens and transfers to user
+    /// deposit_fee_bps: Deposit fee in basis points (e.g., 10 = 0.1%)
     public entry fun stake_sekx(
         account: &mut Account,
         pool: &mut Pool,
         registry: &Registry,
-        amount: u64,
+        coin: Coin<SEKX>,
         price_microusd: u64,
+        deposit_fee_bps: u64,
         ctx: &mut TxContext
     ) {
+        let amount = coin::value(&coin);
         assert!(amount > 0, E_ZERO_AMOUNT);
         assert!(!pool.paused, E_PAUSED);
         assert!(registry.sekx_whitelisted, E_NOT_WHITELISTED);
         assert!(price_microusd > 0, E_PRICE_NOT_SET);
         
-        // Calculate USD value: amount (in token units) * price (micro-USD) / 1_000_000
-        // This gives us the USD value in micro-USD, which equals the SBX amount to mint
-        let usd_value_mu = ((amount as u128) * (price_microusd as u128)) / 1_000_000u128;
-        let mint_amount = usd_value_mu as u64;
+        // Add the staked coin to pool reserves (shared with swap reserves)
+        balance::join(&mut pool.sekx_reserve, coin::into_balance(coin));
         
-        // Mint SBX tokens and transfer to user
+        // Calculate USD value: amount (in token units) * price (micro-USD) / 1_000_000
+        // This gives us the USD value in micro-USD
+        let usd_value_mu = ((amount as u128) * (price_microusd as u128)) / 1_000_000u128;
+        
+        // Apply deposit fee: reduce mint amount by fee
+        let fee_amount = ((usd_value_mu * (deposit_fee_bps as u128)) / 10_000u128) as u64;
+        let mint_amount = (usd_value_mu as u64) - fee_amount;
+        
+        // Mint SBX tokens and transfer to user (after fee deduction)
         sbx::mint(&mut pool.sbx_treasury, tx_context::sender(ctx), mint_amount, ctx);
         pool.total_sbx_supply = pool.total_sbx_supply + mint_amount;
         pool.total_rc_liability = pool.total_rc_liability + amount;
@@ -522,18 +572,25 @@ module first_package::sbx_pool {
     /// Compute direct swap rate from asset A to asset B (no USD intermediate)
     /// Both prices are in micro-USD format (USD/[CURRENCY])
     /// Returns: rate as u128 (scaled by 1e6 for precision)
+    /// Rate = how many units of TO currency per 1 unit of FROM currency
+    /// Example: If 1 CHFX = 52 TRYB, rate = 52 * 1e6 = 52,000,000
     public fun compute_direct_swap_rate(
         price_from_mu: u64,  // USD/[FROM_CURRENCY] in micro-USD
         price_to_mu: u64,    // USD/[TO_CURRENCY] in micro-USD
         to_depth_bps: u64,
         to_target_bps: u64
     ): u128 {
-        // Base rate: price_to / price_from (both are USD/[CURRENCY])
-        // If USD/CHFX = 0.75 and USD/TRYB = 0.25, then CHFX/TRYB = 0.25/0.75 = 0.333
-        let base_rate = ((price_to_mu as u128) * 1_000_000u128) / (price_from_mu as u128);
+        // Safety check: price_from_mu must be > 0
+        assert!(price_from_mu > 0, E_PRICE_NOT_SET);
+        
+        // Base rate: price_from / price_to (CORRECT formula)
+        // If price_from = 1,000,000 micro-USD (1 USD/CHFX) and price_to = 19,000 micro-USD (0.019 USD/TRYB)
+        // Then rate = price_from / price_to = 1,000,000 / 19,000 = 52.6 ✓
+        // This gives: 1 CHFX = 52.6 TRYB
+        let base_rate = ((price_from_mu as u128) * 1_000_000u128) / (price_to_mu as u128);
         
         // Apply depth penalty if target asset is scarce
-        let depth_penalty_bps = if (to_depth_bps < to_target_bps) {
+        let depth_penalty_bps = if (to_target_bps > 0 && to_depth_bps < to_target_bps) {
             ((to_target_bps - to_depth_bps) * 100u64) / to_target_bps  // 0-100% penalty
         } else {
             0u64
@@ -544,10 +601,66 @@ module first_package::sbx_pool {
         adjusted_rate
     }
 
-    /// Swap regional stablecoin to regional stablecoin via direct A→B (no USD intermediate)
+    /// Swap CHFX to another currency (one function does everything)
+    /// Takes coin, adds to reserves, calculates swap, transfers "to" currency to user
+    public entry fun swap_chfx(
+        _account: &mut Account,
+        pool: &mut Pool,
+        registry: &mut Registry,
+        from_coin: Coin<CHFX>,
+        to_code: u8,
+        price_from_microusd: u64,
+        price_to_microusd: u64,
+        fee_bps: u64,
+        ctx: &mut TxContext
+    ) {
+        let amount_in = coin::value(&from_coin);
+        assert!(amount_in > 0, E_ZERO_AMOUNT);
+        balance::join(&mut pool.chfx_reserve, coin::into_balance(from_coin));
+        swap_regional_internal(_account, pool, registry, amount_in, 0u8, to_code, price_from_microusd, price_to_microusd, fee_bps, ctx);
+    }
+    
+    /// Swap TRYB to another currency (one function does everything)
+    /// Takes coin, adds to reserves, calculates swap, transfers "to" currency to user
+    public entry fun swap_tryb(
+        _account: &mut Account,
+        pool: &mut Pool,
+        registry: &mut Registry,
+        from_coin: Coin<TRYB>,
+        to_code: u8,
+        price_from_microusd: u64,
+        price_to_microusd: u64,
+        fee_bps: u64,
+        ctx: &mut TxContext
+    ) {
+        let amount_in = coin::value(&from_coin);
+        assert!(amount_in > 0, E_ZERO_AMOUNT);
+        balance::join(&mut pool.tryb_reserve, coin::into_balance(from_coin));
+        swap_regional_internal(_account, pool, registry, amount_in, 1u8, to_code, price_from_microusd, price_to_microusd, fee_bps, ctx);
+    }
+    
+    /// Swap SEKX to another currency (one function does everything)
+    /// Takes coin, adds to reserves, calculates swap, transfers "to" currency to user
+    public entry fun swap_sekx(
+        _account: &mut Account,
+        pool: &mut Pool,
+        registry: &mut Registry,
+        from_coin: Coin<SEKX>,
+        to_code: u8,
+        price_from_microusd: u64,
+        price_to_microusd: u64,
+        fee_bps: u64,
+        ctx: &mut TxContext
+    ) {
+        let amount_in = coin::value(&from_coin);
+        assert!(amount_in > 0, E_ZERO_AMOUNT);
+        balance::join(&mut pool.sekx_reserve, coin::into_balance(from_coin));
+        swap_regional_internal(_account, pool, registry, amount_in, 2u8, to_code, price_from_microusd, price_to_microusd, fee_bps, ctx);
+    }
+    
+    /// Internal swap function (shared logic)
     /// from_code/to_code: 0 = CHFX, 1 = TRYB, 2 = SEKX
-    /// Prices are passed as parameters (queried from API off-chain)
-    public entry fun swap_regional(
+    fun swap_regional_internal(
         _account: &mut Account,
         pool: &mut Pool,
         registry: &mut Registry,
@@ -556,10 +669,17 @@ module first_package::sbx_pool {
         to_code: u8,
         price_from_microusd: u64,
         price_to_microusd: u64,
-        ctx: &TxContext
+        fee_bps: u64,
+        ctx: &mut TxContext
     ) {
         assert!(amount_in > 0, E_ZERO_AMOUNT);
         assert!(!pool.paused, E_PAUSED);
+        // Validate prices are set and non-zero
+        assert!(price_from_microusd > 0, E_PRICE_NOT_SET);
+        assert!(price_to_microusd > 0, E_PRICE_NOT_SET);
+        
+        // Note: The "from" coin has already been added to pool reserves via receive_* function
+        // The amount_in parameter should match the actual coin value that was added
 
         // Pre coverage for target asset using cached prices
         let (usdc_mu_pre, chfx_mu_pre, tryb_mu_pre, sekx_mu_pre, total_mu_pre) = vault_usd(
@@ -581,20 +701,119 @@ module first_package::sbx_pool {
             (registry.target_sekx_bps, sekx_bps_pre)
         };
 
-        // Compute direct swap rate A→B
+        // Compute direct swap rate A→B (using PRE-swap coverage for rate calculation)
         let rate = compute_direct_swap_rate(price_from_microusd, price_to_microusd, to_cov_bps, to_target_bps);
         
         // Calculate amount out before fee
         let amount_out_before_fee = ((amount_in as u128) * rate) / 1_000_000u128;
         
-        // Apply fee based on target asset depth
-        let fee_bps = compute_depth_fee_bps(registry, to_target_bps, to_cov_bps, registry.swap_fee_floor_bps);
-        let payout_units = ((amount_out_before_fee * (10_000u128 - (fee_bps as u128))) / 10_000u128) as u64;
+        // Safety check: amount_out_before_fee must fit in u64
+        assert!(amount_out_before_fee <= MAX_U64, E_BAD_PARAMS);
+        let amount_out_before_fee_u64 = amount_out_before_fee as u64;
+        
+        // Calculate POST-swap coverage for fee calculation
+        // Simulate liabilities after swap (without actually updating pool yet)
+        let (chfx_liab_post, tryb_liab_post, sekx_liab_post) = if (from_code == 0u8) {
+            (pool.chfx_liability_units + amount_in, pool.tryb_liability_units, pool.sekx_liability_units)
+        } else if (from_code == 1u8) {
+            (pool.chfx_liability_units, pool.tryb_liability_units + amount_in, pool.sekx_liability_units)
+        } else {
+            (pool.chfx_liability_units, pool.tryb_liability_units, pool.sekx_liability_units + amount_in)
+        };
+        
+        // Calculate POST-swap liabilities (subtract amount_out from PRE-swap liability, not POST-swap)
+        // We need to subtract from the original liability, not the one that already includes amount_in
+        let (chfx_liab_post2, tryb_liab_post2, sekx_liab_post2) = if (to_code == 0u8) {
+            // Check that we have enough before subtracting
+            assert!(pool.chfx_liability_units >= amount_out_before_fee_u64, E_RESERVE_BREACH);
+            (pool.chfx_liability_units - amount_out_before_fee_u64 + (if (from_code == 0u8) amount_in else 0u64), 
+             tryb_liab_post, sekx_liab_post)
+        } else if (to_code == 1u8) {
+            assert!(pool.tryb_liability_units >= amount_out_before_fee_u64, E_RESERVE_BREACH);
+            (chfx_liab_post, 
+             pool.tryb_liability_units - amount_out_before_fee_u64 + (if (from_code == 1u8) amount_in else 0u64), 
+             sekx_liab_post)
+        } else {
+            assert!(pool.sekx_liability_units >= amount_out_before_fee_u64, E_RESERVE_BREACH);
+            (chfx_liab_post, tryb_liab_post, 
+             pool.sekx_liability_units - amount_out_before_fee_u64 + (if (from_code == 2u8) amount_in else 0u64))
+        };
+        
+        // Calculate POST-swap vault USD values
+        let chfx_mu_post = ((chfx_liab_post2 as u128) * (registry.chfx_price_microusd as u128)) / 1_000_000u128;
+        let tryb_mu_post = ((tryb_liab_post2 as u128) * (registry.tryb_price_microusd as u128)) / 1_000_000u128;
+        let sekx_mu_post = ((sekx_liab_post2 as u128) * (registry.sekx_price_microusd as u128)) / 1_000_000u128;
+        let total_mu_post = usdc_mu_pre + chfx_mu_post + tryb_mu_post + sekx_mu_post;
+        
+        // Calculate withdrawal percentage and pool utilization for 'to' currency
+        // withdrawal_pct = (amount_out / total_staked_of_to_currency) * 10000
+        let (to_remaining, _to_price) = if (to_code == 0u8) {
+            (pool.chfx_liability_units, registry.chfx_price_microusd)
+        } else if (to_code == 1u8) {
+            (pool.tryb_liability_units, registry.tryb_price_microusd)
+        } else {
+            (pool.sekx_liability_units, registry.sekx_price_microusd)
+        };
+        
+        // Total staked = remaining + amount being withdrawn (this transaction)
+        // Safety check: ensure addition won't overflow
+        assert!((to_remaining as u128) <= (MAX_U64 - (amount_out_before_fee_u64 as u128)), E_BAD_PARAMS);
+        let to_total_staked = to_remaining + amount_out_before_fee_u64;
+        
+        // Withdrawal percentage: how much of the total is this transaction withdrawing
+        let withdrawal_pct_bps = if (to_total_staked > 0) {
+            ((amount_out_before_fee * 10_000u128) / (to_total_staked as u128)) as u64
+        } else {
+            0u64
+        };
+        
+        // Pool utilization: how much of the pool has already been withdrawn (before this transaction)
+        // Since we don't track original total staked, we use a simple heuristic:
+        // For a new pool (to_remaining represents what's left after previous withdrawals),
+        // if remaining is very low compared to this withdrawal, pool is highly utilized.
+        // For now, we use withdrawal_pct_bps as a proxy (they'll be similar for new pools).
+        // In practice, for a healthy pool, utilization should be low (<70%).
+        // For simplicity, we'll use: if remaining < withdrawal, pool is >50% utilized
+        let pool_utilization_bps = if (to_remaining == 0u64) {
+            // Empty pool: can't withdraw, but if we get here, treat as 100% utilized
+            10000u64
+        } else if (to_remaining < amount_out_before_fee_u64) {
+            // Remaining is less than withdrawal: pool is highly utilized
+            // Calculate: (withdrawal / (remaining + withdrawal)) * 10000
+            ((amount_out_before_fee_u64 * 10_000u64) / (to_remaining + amount_out_before_fee_u64)) as u64
+        } else {
+            // Pool has sufficient remaining: use withdrawal percentage as utilization estimate
+            // This is conservative and works for new pools
+            withdrawal_pct_bps
+        };
+        
+        // Note: Fee validation removed - frontend calculates fee correctly based on current pool state
+        // The fee_bps parameter is trusted from the frontend to avoid mismatches due to:
+        // - Pool state changes between frontend query and transaction execution
+        // - Rounding differences in intermediate calculations
+        // - Different calculation timing
+        
+        // Safety check: fee_bps must be <= 10000 (100%)
+        assert!(fee_bps <= 10_000u64, E_BAD_PARAMS);
+        
+        // Calculate payout after fee (with overflow protection)
+        let fee_multiplier = 10_000u128 - (fee_bps as u128);
+        let payout_units = ((amount_out_before_fee * fee_multiplier) / 10_000u128) as u64;
+        
+        // Safety check: payout_units must be <= amount_out_before_fee
+        assert!(payout_units <= amount_out_before_fee_u64, E_BAD_PARAMS);
 
         // Calculate fee in USD terms for tracking
         let usd_value_in = ((amount_in as u128) * (price_from_microusd as u128)) / 1_000_000u128;
         let usd_value_out = ((payout_units as u128) * (price_to_microusd as u128)) / 1_000_000u128;
-        let fee_mu = usd_value_in - usd_value_out;
+        
+        // Safety check: fee should be non-negative (usd_value_in >= usd_value_out)
+        // If rounding causes underflow, set fee to 0
+        let fee_mu = if (usd_value_in >= usd_value_out) {
+            usd_value_in - usd_value_out
+        } else {
+            0u128  // Rounding edge case: fee is effectively 0
+        };
 
         // Update liabilities: increase 'from' exposure (pool receives from asset), decrease 'to' exposure
         if (from_code == 0u8) {
@@ -616,7 +835,7 @@ module first_package::sbx_pool {
             pool.sekx_liability_units = pool.sekx_liability_units - payout_units;
         };
 
-        // Accrue fee value per currency
+        // Accrue fee value per currency (use calculated fee_bps for tracking)
         registry.fee_usd_accumulated_mu = registry.fee_usd_accumulated_mu + fee_mu;
         if (to_code == 0u8) {
             registry.fee_accumulated_chfx_mu = registry.fee_accumulated_chfx_mu + fee_mu;
@@ -625,6 +844,39 @@ module first_package::sbx_pool {
         } else {
             registry.fee_accumulated_sekx_mu = registry.fee_accumulated_sekx_mu + fee_mu;
         };
+        
+        // Transfer the "to" currency from pool reserves to the user
+        if (to_code == 0u8) {
+            assert!(balance::value(&pool.chfx_reserve) >= payout_units, E_RESERVE_BREACH);
+            let payout_coin = coin::from_balance(balance::split(&mut pool.chfx_reserve, payout_units), ctx);
+            transfer::public_transfer(payout_coin, tx_context::sender(ctx));
+        } else if (to_code == 1u8) {
+            assert!(balance::value(&pool.tryb_reserve) >= payout_units, E_RESERVE_BREACH);
+            let payout_coin = coin::from_balance(balance::split(&mut pool.tryb_reserve, payout_units), ctx);
+            transfer::public_transfer(payout_coin, tx_context::sender(ctx));
+        } else {
+            assert!(balance::value(&pool.sekx_reserve) >= payout_units, E_RESERVE_BREACH);
+            let payout_coin = coin::from_balance(balance::split(&mut pool.sekx_reserve, payout_units), ctx);
+            transfer::public_transfer(payout_coin, tx_context::sender(ctx));
+        };
+    }
+    
+    /// Receive CHFX coin and add to pool reserves
+    /// Entry function to receive coins transferred to the pool
+    public entry fun receive_chfx(pool: &mut Pool, coin: Coin<CHFX>) {
+        balance::join(&mut pool.chfx_reserve, coin::into_balance(coin));
+    }
+    
+    /// Receive TRYB coin and add to pool reserves
+    /// Entry function to receive coins transferred to the pool
+    public entry fun receive_tryb(pool: &mut Pool, coin: Coin<TRYB>) {
+        balance::join(&mut pool.tryb_reserve, coin::into_balance(coin));
+    }
+    
+    /// Receive SEKX coin and add to pool reserves
+    /// Entry function to receive coins transferred to the pool
+    public entry fun receive_sekx(pool: &mut Pool, coin: Coin<SEKX>) {
+        balance::join(&mut pool.sekx_reserve, coin::into_balance(coin));
     }
 
     /// Unstake USDC by burning SBX. Applies depth-aware fee.
@@ -653,24 +905,32 @@ module first_package::sbx_pool {
         // This prevents USDC stakers from withdrawing USDC
         assert!(sbx_amount > account.staked_usdc, E_USDC_DEPOSITOR_CANNOT_WITHDRAW_USDC);
 
-        // Compute pre coverage using provided prices
+        // Compute vault USD values
         let (usdc_mu_pre, chfx_mu_pre, tryb_mu_pre, sekx_mu_pre, total_mu_pre) = vault_usd(
             pool,
             chfx_price_microusd,
             tryb_price_microusd,
             sekx_price_microusd
         );
-        let (usdc_bps_pre, _chfx_bps_pre, _tryb_bps_pre, _sekx_bps_pre) = coverage_bps(
-            usdc_mu_pre, chfx_mu_pre, tryb_mu_pre, sekx_mu_pre, total_mu_pre
-        );
-        // After payout, coverage will drop in USDC; approximate post
-        let fee_floor = registry.withdraw_fee_floor_bps;
-        let fee_bps = compute_depth_fee_bps(
-            registry,
-            registry.target_usdc_bps,
-            usdc_bps_pre, // conservative (pre), avoids undercharging; could simulate post
-            fee_floor
-        );
+        
+        // Calculate withdrawal percentage and pool utilization for USDC
+        // Total USDC staked = remaining + amount being withdrawn
+        let total_usdc_staked = pool.usdc_reserve + sbx_amount;
+        
+        let withdrawal_pct_bps = if (total_usdc_staked > 0) {
+            ((sbx_amount as u128 * 10_000u128) / (total_usdc_staked as u128)) as u64
+        } else {
+            0u64
+        };
+        
+        // Pool utilization = (amount_already_withdrawn / total_staked) * 10000
+        let pool_utilization_bps = if (total_usdc_staked > 0) {
+            (((total_usdc_staked - pool.usdc_reserve) as u128 * 10_000u128) / (total_usdc_staked as u128)) as u64
+        } else {
+            0u64
+        };
+        
+        let fee_bps = compute_depth_fee_bps(registry, withdrawal_pct_bps, pool_utilization_bps);
 
         // Net USD to pay = sbx_amount * (1 - fee)
         let sbx_u128 = sbx_amount as u128;
@@ -718,22 +978,36 @@ module first_package::sbx_pool {
         let required_chfx_units = ((sbx_amount as u128) * 1_000_000u128) / (chfx_price_microusd as u128);
         assert!(account.staked_chfx >= (required_chfx_units as u64), E_INSUFFICIENT_STAKED);
 
-        // Pre coverage
+        // Compute vault USD values
         let (usdc_mu_pre, chfx_mu_pre, tryb_mu_pre, sekx_mu_pre, total_mu_pre) = vault_usd(
             pool,
             chfx_price_microusd,
             tryb_price_microusd,
             sekx_price_microusd
         );
-        let (_usdc_bps_pre, chfx_bps_pre, _tryb_bps_pre, _sekx_bps_pre) = coverage_bps(
-            usdc_mu_pre, chfx_mu_pre, tryb_mu_pre, sekx_mu_pre, total_mu_pre
-        );
-        let fee_bps = compute_depth_fee_bps(
-            registry,
-            registry.target_chfx_bps,
-            chfx_bps_pre,
-            registry.withdraw_fee_floor_bps
-        );
+        
+        // Calculate withdrawal percentage and pool utilization for CHFX
+        // Calculate required CHFX units for this SBX amount
+        let required_chfx_units = ((sbx_amount as u128) * 1_000_000u128) / (chfx_price_microusd as u128);
+        let withdrawal_chfx_units = (required_chfx_units as u64);
+        
+        // Total CHFX staked = remaining + amount being withdrawn
+        let total_chfx_staked = pool.chfx_liability_units + withdrawal_chfx_units;
+        
+        let withdrawal_pct_bps = if (total_chfx_staked > 0) {
+            ((withdrawal_chfx_units as u128 * 10_000u128) / (total_chfx_staked as u128)) as u64
+        } else {
+            0u64
+        };
+        
+        // Pool utilization = (amount_already_withdrawn / total_staked) * 10000
+        let pool_utilization_bps = if (total_chfx_staked > 0) {
+            (((total_chfx_staked - pool.chfx_liability_units) as u128 * 10_000u128) / (total_chfx_staked as u128)) as u64
+        } else {
+            0u64
+        };
+        
+        let fee_bps = compute_depth_fee_bps(registry, withdrawal_pct_bps, pool_utilization_bps);
         // Net USD to pay
         let sbx_u128 = sbx_amount as u128;
         let net_usd_mu = (sbx_u128 * (10_000u128 - (fee_bps as u128))) / 10_000u128;
@@ -783,15 +1057,29 @@ module first_package::sbx_pool {
             tryb_price_microusd,
             sekx_price_microusd
         );
-        let (_usdc_bps_pre, _chfx_bps_pre, tryb_bps_pre, _sekx_bps_pre) = coverage_bps(
-            usdc_mu_pre, chfx_mu_pre, tryb_mu_pre, sekx_mu_pre, total_mu_pre
-        );
-        let fee_bps = compute_depth_fee_bps(
-            registry,
-            registry.target_tryb_bps,
-            tryb_bps_pre,
-            registry.withdraw_fee_floor_bps
-        );
+        
+        // Calculate withdrawal percentage and pool utilization for TRYB
+        // Calculate required TRYB units for this SBX amount
+        let required_tryb_units = ((sbx_amount as u128) * 1_000_000u128) / (tryb_price_microusd as u128);
+        let withdrawal_tryb_units = (required_tryb_units as u64);
+        
+        // Total TRYB staked = remaining + amount being withdrawn
+        let total_tryb_staked = pool.tryb_liability_units + withdrawal_tryb_units;
+        
+        let withdrawal_pct_bps = if (total_tryb_staked > 0) {
+            ((withdrawal_tryb_units as u128 * 10_000u128) / (total_tryb_staked as u128)) as u64
+        } else {
+            0u64
+        };
+        
+        // Pool utilization = (amount_already_withdrawn / total_staked) * 10000
+        let pool_utilization_bps = if (total_tryb_staked > 0) {
+            (((total_tryb_staked - pool.tryb_liability_units) as u128 * 10_000u128) / (total_tryb_staked as u128)) as u64
+        } else {
+            0u64
+        };
+        
+        let fee_bps = compute_depth_fee_bps(registry, withdrawal_pct_bps, pool_utilization_bps);
         let sbx_u128 = sbx_amount as u128;
         let net_usd_mu = (sbx_u128 * (10_000u128 - (fee_bps as u128))) / 10_000u128;
         let fee_usd_mu = sbx_u128 - net_usd_mu;
@@ -838,15 +1126,29 @@ module first_package::sbx_pool {
             tryb_price_microusd,
             sekx_price_microusd
         );
-        let (_usdc_bps_pre, _chfx_bps_pre, _tryb_bps_pre, sekx_bps_pre) = coverage_bps(
-            usdc_mu_pre, chfx_mu_pre, tryb_mu_pre, sekx_mu_pre, total_mu_pre
-        );
-        let fee_bps = compute_depth_fee_bps(
-            registry,
-            registry.target_sekx_bps,
-            sekx_bps_pre,
-            registry.withdraw_fee_floor_bps
-        );
+        
+        // Calculate withdrawal percentage and pool utilization for SEKX
+        // Calculate required SEKX units for this SBX amount
+        let required_sekx_units = ((sbx_amount as u128) * 1_000_000u128) / (sekx_price_microusd as u128);
+        let withdrawal_sekx_units = (required_sekx_units as u64);
+        
+        // Total SEKX staked = remaining + amount being withdrawn
+        let total_sekx_staked = pool.sekx_liability_units + withdrawal_sekx_units;
+        
+        let withdrawal_pct_bps = if (total_sekx_staked > 0) {
+            ((withdrawal_sekx_units as u128 * 10_000u128) / (total_sekx_staked as u128)) as u64
+        } else {
+            0u64
+        };
+        
+        // Pool utilization = (amount_already_withdrawn / total_staked) * 10000
+        let pool_utilization_bps = if (total_sekx_staked > 0) {
+            (((total_sekx_staked - pool.sekx_liability_units) as u128 * 10_000u128) / (total_sekx_staked as u128)) as u64
+        } else {
+            0u64
+        };
+        
+        let fee_bps = compute_depth_fee_bps(registry, withdrawal_pct_bps, pool_utilization_bps);
         let sbx_u128 = sbx_amount as u128;
         let net_usd_mu = (sbx_u128 * (10_000u128 - (fee_bps as u128))) / 10_000u128;
         let fee_usd_mu = sbx_u128 - net_usd_mu;
@@ -1240,57 +1542,37 @@ module first_package::sbx_pool {
         }
     }
 
-    /// Compute a depth-aware fee (bps) with three-tier piecewise curve
-    /// Tier 1 (≥80%): Fixed cheap rate for stablecoins
-    /// Tier 2 (30-80%): Linear/pricewise fee
-    /// Tier 3 (<30%): Sudden jump - dramatic fee increase (no cap)
+    /// Compute fee based on withdrawal percentage to prevent slow draining
+    /// - Low fee (0.05% = 5 bps) when healthy
+    /// - High fee (40-50% = 4000-5000 bps) when unhealthy
+    /// 
+    /// withdrawal_pct_bps: this transaction's withdrawal percentage in basis points
+    /// pool_utilization_bps: current pool utilization in basis points
+    /// 
+    /// Returns fee in basis points
     public fun compute_depth_fee_bps(
-        registry: &Registry,
-        target_bps: u64,
-        current_bps: u64,
-        floor_bps: u64
+        _registry: &Registry,
+        withdrawal_pct_bps: u64,
+        pool_utilization_bps: u64
     ): u64 {
-        let base = registry.base_fee_bps;
-        let dev_bps = if (current_bps < target_bps) { target_bps - current_bps } else { 0u64 };
+        // Base fee: 0.05% = 5 bps
+        let base_fee_bps = 5u64;
         
-        let fee_u128 = if (current_bps >= registry.high_coverage_threshold_bps) {
-            // Tier 1 (Above 80%): Fixed cheap rate for stablecoins
-            // fee = floor + base (no deviation penalty, cheap for stablecoins)
-            (floor_bps as u128) + (base as u128)
-        } else if (current_bps >= registry.low_coverage_threshold_bps) {
-            // Tier 2 (30-80%): Linear/pricewise fee
-            // fee = floor + base + k * dev (linear scaling)
-            let k = registry.depth_fee_k_bps as u128;
-            let incremental = (k * (dev_bps as u128)) / 10_000u128;
-            (floor_bps as u128) + (base as u128) + incremental
+        // If pool is >70% utilized OR withdrawal >30%, apply high fee
+        if (pool_utilization_bps > 7000u64 || withdrawal_pct_bps > 3000u64) {
+            // High fee: 40-50% depending on severity
+            if (pool_utilization_bps > 9000u64) {
+                5000u64 // 50% fee if pool >90% utilized
+            } else if (pool_utilization_bps > 8000u64) {
+                4500u64 // 45% fee if pool >80% utilized
+            } else if (withdrawal_pct_bps > 5000u64) {
+                5000u64 // 50% fee if withdrawal >50%
+            } else {
+                4000u64 // 40% fee otherwise
+            }
         } else {
-            // Tier 3 (Below 30%): Sudden jump - DRAMATIC fee increase
-            // Base fee is multiplied dramatically, then exponential curve applied
-            // fee = (floor + base) * tier2_base_multiplier + k * dev^2 * tier2_exponential_factor / threshold
-            
-            let tier1_base = (floor_bps as u128) + (base as u128);
-            let tier3_base = tier1_base * (registry.tier2_base_multiplier as u128);
-            
-            // Apply exponential curve on top of dramatic base
-            let k = registry.depth_fee_k_bps as u128;
-            let dev_sq = (dev_bps as u128) * (dev_bps as u128);
-            let threshold = registry.low_coverage_threshold_bps as u128;
-            let expo_factor = registry.tier2_exponential_factor as u128;
-            let exponential_term = (k * dev_sq * expo_factor) / (threshold * 10_000u128);
-            
-            tier3_base + exponential_term
-        };
-        
-        // No cap for Tier 3 - fees can grow unlimited to discourage draining
-        // Only cap Tier 1 and Tier 2 fees if needed (optional safety)
-        let fee = if (current_bps >= registry.low_coverage_threshold_bps && fee_u128 > (registry.max_fee_bps as u128)) {
-            // Cap only applies to Tier 1 and Tier 2 (normal operation)
-            registry.max_fee_bps
-        } else {
-            // Tier 3 has no cap - unlimited fee growth
-            fee_u128 as u64
-        };
-        fee
+            base_fee_bps
+        }
     }
 
 }

@@ -105,13 +105,14 @@ Users deposit USDC or regional stablecoins to earn unified yield, receive SBX to
 
 ## Package Information
 
-### Latest Package (Unified Basket with Shared Objects - Production Ready)
-- **Package ID:** `0x6ebf91f7fb200377491c41e9a81dbde911a93ff2f8ec7aaa0e3e21fe424c6514`
-- **Published:** Latest version with shared Pool and Registry objects for multi-user access
-- **Transaction Digest:** `97f5RaXyTm4EHBSUW86bKETQLmUsFQNiKB3acXhnLyRb`
+### Latest Package (Coin Transfer Logic - Production Ready)
+- **Package ID:** `0x82dbc84bde7f084cd91ff6d66a8c80fb7a569ba7d4fbe4b6dba5fa6a2223518d`
+- **Published:** Latest version with coin transfer logic (swaps transfer from pool reserves, not minting)
+- **Transaction Digest:** `FhHomi5X5KLRLam3psL8PZCJZBD3DVMwGAuTkKfLX2TK`
 - **Network:** IOTA Testnet
-- **Pool Object ID:** `0x1f88410b6a652e5f9a31061d7eaa7939b12b3811606070bc2743470f3846756d` (Shared)
-- **Registry Object ID:** `0x967a22966d19e27ced4aea39e5ef90442aa94473b41123445bcd697beae1b5d6` (Shared)
+- **Pool Object ID:** `0x01cb94ca84954452ea7fd088ee386f044d1d474742cc5c3cde6325e51c29b276` (Shared)
+- **Registry Object ID:** `0x78eb44c732de48c5bf800312213b2ecbaf0e43f4f463aad245648fc6a20308cf` (Shared)
+- **Previous Package ID:** `0xe917e90a0763a67851076f55ac8eda48a533b3ff6c1bb1d0774d10c6d8c40ca2` (Fee tolerance fix)
 - **Modules:** `chfx`, `tryb`, `sekx`, `sbx`, `sbx_pool`, `usdc`, `flash_vault`, `jpyc`, `myrc`, `xsgd`
 - **Key Features:**
   - **Shared Objects**: Pool and Registry are shared objects, enabling multi-user interaction
@@ -134,20 +135,25 @@ Users deposit USDC or regional stablecoins to earn unified yield, receive SBX to
 The frontend is a Next.js application with full wallet integration:
 
 - **Wallet Connection**: IOTA dApp Kit integration with wallet persistence
-- **Staking Interface**: Full staking UI with currency selection, amount input, fee display
+- **Staking Interface**: ✅ Full staking UI with currency selection, amount input, fee display
+- **Swap Interface**: ✅ Direct A→B swaps between regional stablecoins with real-time rate calculation
 - **Real-time Prices**: Fetches prices from Pyth Network Hermes API
-- **Fee Calculation**: Real-time fee calculation from the pool contract
+- **Fee Calculation**: Real-time fee calculation from the pool contract with depth-aware fees
 - **Transaction Handling**: Automatic account creation, coin transfers, and SBX minting
-- **Transaction Explorer**: Success snackbar with link to IOTA explorer
+- **Transaction Explorer**: Success snackbar with link to IOTA explorer (fixed position overlay)
 - **Network Support**: Testnet configuration with auto-connect and persistence
 
 **Key Frontend Features:**
-- Multi-currency support (USDC, CHFX, TRYB, SEKX, JPYC, MYRC, XSGD)
-- USD value display for all currencies
-- Collapsible fee breakdown (network fee, deposit fee, swap fee)
-- Account object management (automatic creation and caching)
-- Shared object handling (Pool and Registry)
-- Coin transfer integration (coins properly deducted from wallet)
+- ✅ **Staking**: Multi-currency support (USDC, CHFX, TRYB, SEKX, JPYC, MYRC, XSGD)
+- ✅ **Swapping**: Direct swaps between regional stablecoins (CHFX, TRYB, SEKX)
+- ✅ **Price Synchronization**: Exact price matching between frontend and on-chain transactions
+- ✅ **BigInt Precision**: All calculations use BigInt to match Move contract integer arithmetic
+- ✅ **USD Value Display**: Accurate USD value display for all currencies
+- ✅ **Fee Breakdown**: Collapsible fee breakdown (network fee, deposit fee, swap fee)
+- ✅ **Account Management**: Automatic account creation and caching
+- ✅ **Shared Objects**: Proper handling of Pool and Registry shared objects
+- ✅ **Coin Transfers**: Coins properly split and transferred to pool during staking
+- ✅ **Transaction Status**: Snackbar notifications with explorer links for successful transactions
 
 ### Previous Packages
 - **Package ID:** `0x71157d06f6ea5ac0d5f952881126591da1c0d5e3980e9ab9dbf1d08dff989846` (Unified Basket with Migration - had owned objects issue)
@@ -164,20 +170,23 @@ The frontend is a Next.js application with full wallet integration:
 All tokens are regulated currencies with 6 decimals:
 
 1. **CHFX (Swiss Franc)**
-   - TreasuryCap ID: `0xc7eccd077937ab60fe9526b2572841e2a5ef57a0a2b0489b2b38854fddfd0f69`
-   - Address: `0x0b1e3297e69f162877b577b0d6a47a0d63b2392bc8499e6540da4187a63e28f8`
+   - TreasuryCap ID: `0x1a9aee47ef68ebc2c1f9577c6e82e83e473ebc264a8711a932429af4841bad5d`
+   - Package: `0x82dbc84bde7f084cd91ff6d66a8c80fb7a569ba7d4fbe4b6dba5fa6a2223518d`
+   - Coin Type: `0x82dbc84bde7f084cd91ff6d66a8c80fb7a569ba7d4fbe4b6dba5fa6a2223518d::chfx::CHFX`
    - Initial Mint: 1000 tokens (1000000000 with 6 decimals)
    - Owner: `0xd4655ee4e9f16da4be0342c9e8e3729478be385c26caf43ec5e5a049198cb1a2`
 
 2. **TRYB (Turkish Lira)**
-   - TreasuryCap ID: `0x96df069dcd39491066552d780ef9e942bd47fd45185fb96a66fadfa0515c510a`
-   - Address: `0x032a2eba1c2635bf973e95fb62b2c0705c1be2603b9572cc8d5edeaf8744e058`
+   - TreasuryCap ID: `0x60dd01a586c0c0246270b973114d751beb082d6fd9531dac041eb13d30dd3096`
+   - Package: `0x82dbc84bde7f084cd91ff6d66a8c80fb7a569ba7d4fbe4b6dba5fa6a2223518d`
+   - Coin Type: `0x82dbc84bde7f084cd91ff6d66a8c80fb7a569ba7d4fbe4b6dba5fa6a2223518d::tryb::TRYB`
    - Initial Mint: 1000 tokens (1000000000 with 6 decimals)
    - Owner: `0xd4655ee4e9f16da4be0342c9e8e3729478be385c26caf43ec5e5a049198cb1a2`
 
 3. **SEKX (Swedish Krona)**
-   - TreasuryCap ID: `0x8b1b78eb006b50015b04727d2e50149401dec7125ee0aa1eecdf3070540a6e18`
-   - Address: `0x8ccb376aa871517e807358d4e3cf0bc7fe4950474dbe6c9ffc21ef64e43fc676`
+   - TreasuryCap ID: `0x95539e85ebff64b98e21ef556dabc774666bbdda7b034197f968b7f9800bc55f`
+   - Package: `0x82dbc84bde7f084cd91ff6d66a8c80fb7a569ba7d4fbe4b6dba5fa6a2223518d`
+   - Coin Type: `0x82dbc84bde7f084cd91ff6d66a8c80fb7a569ba7d4fbe4b6dba5fa6a2223518d::sekx::SEKX`
    - Initial Mint: 1000 tokens (1000000000 with 6 decimals)
    - Owner: `0xd4655ee4e9f16da4be0342c9e8e3729478be385c26caf43ec5e5a049198cb1a2`
 
@@ -214,7 +223,13 @@ All functions that require prices now accept them as direct parameters:
 
 ## Key Transactions
 
-### Latest Package Publication (SBX Token + Migration Support)
+### Latest Package Publication (Coin Transfer Logic - Production Ready)
+- **Transaction Digest:** `FhHomi5X5KLRLam3psL8PZCJZBD3DVMwGAuTkKfLX2TK`
+- **Package ID:** `0x82dbc84bde7f084cd91ff6d66a8c80fb7a569ba7d4fbe4b6dba5fa6a2223518d`
+- **Modules:** chfx, tryb, sekx, sbx, sbx_pool, usdc, flash_vault, jpyc, myrc, xsgd
+- **Published:** Latest version with coin transfer logic (swaps transfer from pool reserves, not minting), shared objects for multi-user access, unified basket architecture, and full frontend integration with staking and swapping
+
+### Previous Package Publication (SBX Token + Migration Support)
 - **Transaction Digest:** `4NsomjHZC6S54ZFjSbQDUt1RJHhSjbHbFtEPS1wtRziC`
 - **Package ID:** `0x71157d06f6ea5ac0d5f952881126591da1c0d5e3980e9ab9dbf1d08dff989846`
 - **Modules:** chfx, tryb, sekx, sbx, sbx_pool, usdc, jpyc, myrc, xsgd
@@ -260,7 +275,7 @@ All tokens and treasury caps are owned by:
    - **Security features**: Zero amount protection, balance validation, state consistency
    - Shared object design for multi-user access
    - Admin functions for vault management
-   - **Deployed**: Package ID `0xf9c589d88c04686711a24f30b1b6e3de21a3bc1c6aa13b87dc5b323b9e122aee`
+   - **Deployed**: Included in latest package `0x82dbc84bde7f084cd91ff6d66a8c80fb7a569ba7d4fbe4b6dba5fa6a2223518d`
 
 3. **chfx.move, tryb.move, sekx.move, usdc.move** - Token modules
    - Regulated currency creation (EUR-focused tokens)
@@ -386,6 +401,7 @@ public entry fun withdraw_sekx(...)
 ```move
 // Direct A→B swap (no USD intermediate)
 // Prices queried from API and passed as parameters
+// Applies depth-aware fees based on pool utilization and withdrawal percentage
 public entry fun swap_regional(
     account: &mut Account,
     pool: &mut Pool,
@@ -398,6 +414,14 @@ public entry fun swap_regional(
     ctx: &TxContext
 )
 ```
+
+**Frontend Integration:**
+- ✅ Real-time swap rate calculation via `/api/swap-rate` endpoint
+- ✅ Exact price synchronization between API and on-chain transaction
+- ✅ BigInt precision matching Move contract integer arithmetic
+- ✅ Depth-aware fee calculation with three-tier fee curve
+- ✅ Coin splitting and transfer for exact amounts
+- ✅ Transaction status snackbar with explorer link
 
 ### Admin Functions
 
@@ -586,12 +610,12 @@ public fun coverage_bps(
 - Location: `first_package/tests/sbx_pool_integration_tests.move`
 - Tests: Full integration tests including account creation, migration, staking, unstaking, swaps, yield distribution
 
-### On-Chain Testing & Production Status
+### Production Status
 - **Package Published:** ✅ Successfully published to IOTA testnet
-- **Package ID:** `0x6ebf91f7fb200377491c41e9a81dbde911a93ff2f8ec7aaa0e3e21fe424c6514`
+- **Package ID:** `0x82dbc84bde7f084cd91ff6d66a8c80fb7a569ba7d4fbe4b6dba5fa6a2223518d`
 - **Pool Object:** ✅ Created as shared object (multi-user access enabled)
 - **Registry Object:** ✅ Created as shared object (multi-user access enabled)
-- **Frontend Integration:** ✅ Fully functional with wallet connection and staking
+- **Frontend Integration:** ✅ Fully functional with wallet connection, staking, and swapping
 - **Test Results:** See `first_package/TEST_RESULTS.md` for detailed on-chain test results
 
 **Production-Ready Features:**
@@ -599,13 +623,14 @@ public fun coverage_bps(
 - ✅ `create_pool` - Pool created as shared object
 - ✅ `create_account` - Automatic account creation for users
 - ✅ `stake_usdc`, `stake_chfx`, `stake_tryb`, `stake_sekx` - All staking functions working
-- ✅ Coin transfers - Coins properly deducted from wallet and transferred to pool
+- ✅ `swap_regional` - Direct A→B swaps between regional stablecoins working
+- ✅ Coin transfers - Coins properly split and transferred to pool
 - ✅ SBX minting - SBX tokens minted 1:1 with USD value
-- ✅ Real-time fee calculation - Network fees, deposit fees, and swap fees
-- ✅ Price feeds - API-based price queries with USD value display
-- ✅ Transaction explorer integration - Success notifications with explorer links
+- ✅ Real-time fee calculation - Network fees, deposit fees, and swap fees with depth-aware pricing
+- ✅ Price feeds - API-based price queries with exact synchronization between frontend and contract
+- ✅ Transaction explorer integration - Success snackbar notifications with explorer links
 
-**Status:** ✅ Production-ready on IOTA Testnet
+**Status:** ✅ Production-ready on IOTA Testnet - Stake and Swap fully operational
 
 ## Dependencies
 
@@ -630,26 +655,34 @@ first_package = "0x0"
 
 ## Development Status
 
-✅ **Production Ready:**
-- **Unified Basket Architecture**: All currencies (USDC + regionals) in one pool
-- **Shared Objects**: Pool and Registry created as shared objects for multi-user access
-- **Asymmetric Withdrawal Rules**: Regional depositors can withdraw USDC; USDC depositors cannot
-- **Unified APY**: All depositors earn the same APY (higher than USDC alone)
-- **Flash Loan Vault**: Real flash loan functionality deployed on IOTA Testnet
-- **Frontend dApp**: Complete Next.js application with full wallet integration
-- **Staking Flow**: Working staking with coin transfers, SBX minting, and account management
-- **Real-time Features**: Price feeds, fee calculation, USD value display
-- Token creation (CHFX, TRYB, SEKX, USDC, JPYC, MYRC, XSGD)
-- API-based price feed integration (no onchain queries)
-- Price parameters in all price-sensitive functions
-- Three-tier fee curve (80%/30% thresholds)
-- Direct A→B swaps (no USD intermediate)
-- Balance-based USDC allocation (30/50/20 split)
-- Flash loan vault allocation (30% of excess)
-- Unified APY calculation (weighted average)
-- Deposit type tracking (for asymmetric withdrawal enforcement)
-- Package compilation and publishing
-- Token minting (1000 tokens of each type)
+✅ **Production Ready - Stake & Swap Fully Functional:**
+
+### Core Features (✅ Working)
+- ✅ **Staking**: Multi-currency staking (USDC, CHFX, TRYB, SEKX, JPYC, MYRC, XSGD)
+- ✅ **Swapping**: Direct A→B swaps between regional stablecoins with real-time rate calculation
+- ✅ **Unified Basket Architecture**: All currencies (USDC + regionals) in one pool
+- ✅ **Shared Objects**: Pool and Registry created as shared objects for multi-user access
+- ✅ **Asymmetric Withdrawal Rules**: Regional depositors can withdraw USDC; USDC depositors cannot
+- ✅ **Unified APY**: All depositors earn the same APY (higher than USDC alone)
+- ✅ **Flash Loan Vault**: Real flash loan functionality deployed on IOTA Testnet
+- ✅ **Frontend dApp**: Complete Next.js application with full wallet integration
+- ✅ **Coin Management**: Proper coin splitting and transfer for exact amounts
+- ✅ **Price Synchronization**: Exact price matching between API calculations and on-chain transactions
+- ✅ **BigInt Precision**: All calculations use BigInt to match Move contract integer arithmetic
+- ✅ **Transaction Status**: Snackbar notifications with explorer links
+
+### Technical Implementation (✅ Complete)
+- ✅ Token creation (CHFX, TRYB, SEKX, USDC, JPYC, MYRC, XSGD)
+- ✅ API-based price feed integration (no onchain queries)
+- ✅ Price parameters in all price-sensitive functions
+- ✅ Three-tier fee curve (80%/30% thresholds) with depth-aware fees
+- ✅ Direct A→B swaps (no USD intermediate)
+- ✅ Balance-based USDC allocation (30/50/20 split)
+- ✅ Flash loan vault allocation (30% of excess)
+- ✅ Unified APY calculation (weighted average)
+- ✅ Deposit type tracking (for asymmetric withdrawal enforcement)
+- ✅ Package compilation and publishing
+- ✅ Token minting (1000 tokens of each type)
 
 ## Key Formulas
 
@@ -740,9 +773,10 @@ await contract.deposit_usdc({
 
 - **Network:** IOTA Testnet
 - **Explorer:** https://explorer.iota.org/ (use `?network=testnet` parameter)
-- **Package ID:** `0x6ebf91f7fb200377491c41e9a81dbde911a93ff2f8ec7aaa0e3e21fe424c6514`
-- **Pool Object:** `0x1f88410b6a652e5f9a31061d7eaa7939b12b3811606070bc2743470f3846756d` (Shared)
-- **Registry Object:** `0x967a22966d19e27ced4aea39e5ef90442aa94473b41123445bcd697beae1b5d6` (Shared)
+- **Latest Package ID:** `0x82dbc84bde7f084cd91ff6d66a8c80fb7a569ba7d4fbe4b6dba5fa6a2223518d`
+- **Transaction Digest:** `FhHomi5X5KLRLam3psL8PZCJZBD3DVMwGAuTkKfLX2TK`
+- **Pool Object:** `0x01cb94ca84954452ea7fd088ee386f044d1d474742cc5c3cde6325e51c29b276` (Shared)
+- **Registry Object:** `0x78eb44c732de48c5bf800312213b2ecbaf0e43f4f463aad245648fc6a20308cf` (Shared)
 
 ## Quick Start
 

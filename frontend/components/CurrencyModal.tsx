@@ -8,8 +8,9 @@ type Currency = "USDC" | "CHFX" | "TRYB" | "SEKX" | "JPYC" | "MYRC" | "XSGD";
 interface CurrencyModalProps {
   isOpen: boolean;
   onClose: () => void;
-  selectedCurrency: Currency;
+  selectedCurrency: Currency | null;
   onSelect: (currency: Currency) => void;
+  excludedCurrencies?: Currency[];
 }
 
 const currencies: Currency[] = ["USDC", "CHFX", "TRYB", "SEKX", "JPYC", "MYRC", "XSGD"];
@@ -18,31 +19,31 @@ const currencies: Currency[] = ["USDC", "CHFX", "TRYB", "SEKX", "JPYC", "MYRC", 
 // Note: These are the actual package addresses from the wallet balances
 const currencyInfo: Record<Currency, { packageAddress: string; coinType: string }> = {
   USDC: {
-    packageAddress: "0xa5afd11d15dfa90e5ac47ac1a2a74b810b6d0d3c00df8c35c33b90c44e32931d",
+    packageAddress: "0xe3a167fa29d171fc79d0b76534fcd8fa86e719177e732373fb9e004076e16a0f",
     coinType: "0xa5afd11d15dfa90e5ac47ac1a2a74b810b6d0d3c00df8c35c33b90c44e32931d::usdc::USDC"
   },
   CHFX: {
-    packageAddress: "0x7d6fa54ec2a4ae5620967a2129860f5a8a0b4d9849df64f2ae9b5325f3ca7db0",
-    coinType: "0x7d6fa54ec2a4ae5620967a2129860f5a8a0b4d9849df64f2ae9b5325f3ca7db0::chfx::CHFX"
+    packageAddress: "0xe3a167fa29d171fc79d0b76534fcd8fa86e719177e732373fb9e004076e16a0f",
+    coinType: "0xe3a167fa29d171fc79d0b76534fcd8fa86e719177e732373fb9e004076e16a0f::chfx::CHFX"
   },
   TRYB: {
-    packageAddress: "0x7d6fa54ec2a4ae5620967a2129860f5a8a0b4d9849df64f2ae9b5325f3ca7db0",
-    coinType: "0x7d6fa54ec2a4ae5620967a2129860f5a8a0b4d9849df64f2ae9b5325f3ca7db0::tryb::TRYB"
+    packageAddress: "0xe3a167fa29d171fc79d0b76534fcd8fa86e719177e732373fb9e004076e16a0f",
+    coinType: "0xe3a167fa29d171fc79d0b76534fcd8fa86e719177e732373fb9e004076e16a0f::tryb::TRYB"
   },
   SEKX: {
-    packageAddress: "0x7d6fa54ec2a4ae5620967a2129860f5a8a0b4d9849df64f2ae9b5325f3ca7db0",
-    coinType: "0x7d6fa54ec2a4ae5620967a2129860f5a8a0b4d9849df64f2ae9b5325f3ca7db0::sekx::SEKX"
+    packageAddress: "0xe3a167fa29d171fc79d0b76534fcd8fa86e719177e732373fb9e004076e16a0f",
+    coinType: "0xe3a167fa29d171fc79d0b76534fcd8fa86e719177e732373fb9e004076e16a0f::sekx::SEKX"
   },
   JPYC: {
-    packageAddress: "0xa5afd11d15dfa90e5ac47ac1a2a74b810b6d0d3c00df8c35c33b90c44e32931d",
+    packageAddress: "0xe3a167fa29d171fc79d0b76534fcd8fa86e719177e732373fb9e004076e16a0f",
     coinType: "0xa5afd11d15dfa90e5ac47ac1a2a74b810b6d0d3c00df8c35c33b90c44e32931d::jpyc::JPYC"
   },
   MYRC: {
-    packageAddress: "0xa5afd11d15dfa90e5ac47ac1a2a74b810b6d0d3c00df8c35c33b90c44e32931d",
+    packageAddress: "0xe3a167fa29d171fc79d0b76534fcd8fa86e719177e732373fb9e004076e16a0f",
     coinType: "0xa5afd11d15dfa90e5ac47ac1a2a74b810b6d0d3c00df8c35c33b90c44e32931d::myrc::MYRC"
   },
   XSGD: {
-    packageAddress: "0xa5afd11d15dfa90e5ac47ac1a2a74b810b6d0d3c00df8c35c33b90c44e32931d",
+    packageAddress: "0xe3a167fa29d171fc79d0b76534fcd8fa86e719177e732373fb9e004076e16a0f",
     coinType: "0xa5afd11d15dfa90e5ac47ac1a2a74b810b6d0d3c00df8c35c33b90c44e32931d::xsgd::XSGD"
   }
 };
@@ -57,7 +58,7 @@ const getExplorerUrl = (packageAddress: string) => {
   return `https://explorer.iota.org/object/${packageAddress}?network=testnet`;
 };
 
-export default function CurrencyModal({ isOpen, onClose, selectedCurrency, onSelect }: CurrencyModalProps) {
+export default function CurrencyModal({ isOpen, onClose, selectedCurrency, onSelect, excludedCurrencies = [] }: CurrencyModalProps) {
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [balances, setBalances] = useState<Record<Currency, string>>({
     USDC: "0",
@@ -176,37 +177,33 @@ export default function CurrencyModal({ isOpen, onClose, selectedCurrency, onSel
             // Try multiple matching strategies
             let balance: string | undefined;
             
-            // Strategy 1: Exact match with normalized type
+            // Strategy 1: Exact match with normalized type (correct package)
             balance = balanceMap.get(normalizedType);
             
-            // Strategy 2: Try matching by currency name in the coin type
-            if (!balance) {
-              for (const [coinTypeKey, balanceValue] of balanceMap.entries()) {
-                const currencyLower = currency.toLowerCase();
-                if (coinTypeKey.toLowerCase().includes(currencyLower) && 
-                    (coinTypeKey.includes('::usdc::') || 
-                     coinTypeKey.includes('::chfx::') || 
-                     coinTypeKey.includes('::tryb::') || 
-                     coinTypeKey.includes('::sekx::'))) {
-                  balance = balanceValue;
-                  console.log(`Matched ${currency} by name: ${coinTypeKey} = ${balanceValue}`);
-                  break;
-                }
-              }
-            }
-            
-            // Strategy 3: Try matching the package address + currency name
+            // Strategy 2: Match by package address + currency name (ONLY from correct package)
             if (!balance) {
               const packageAddr = currencyInfo[currency].packageAddress.toLowerCase();
               for (const [coinTypeKey, balanceValue] of balanceMap.entries()) {
-                if (coinTypeKey.toLowerCase().includes(packageAddr) && 
-                    coinTypeKey.toLowerCase().includes(currency.toLowerCase())) {
+                const keyLower = coinTypeKey.toLowerCase();
+                // MUST include the correct package address AND currency name
+                if (keyLower.includes(packageAddr) && 
+                    keyLower.includes(currency.toLowerCase()) &&
+                    (keyLower.includes('::usdc::') || 
+                     keyLower.includes('::chfx::') || 
+                     keyLower.includes('::tryb::') || 
+                     keyLower.includes('::sekx::') ||
+                     keyLower.includes('::jpyc::') ||
+                     keyLower.includes('::myrc::') ||
+                     keyLower.includes('::xsgd::'))) {
                   balance = balanceValue;
                   console.log(`Matched ${currency} by package + name: ${coinTypeKey} = ${balanceValue}`);
                   break;
                 }
               }
             }
+            
+            // Strategy 3: Fallback - try exact getBalance with correct coin type
+            // (This ensures we only get coins from the correct package)
             
             if (balance) {
               // Format balance (6 decimals based on Move code)
@@ -321,6 +318,11 @@ export default function CurrencyModal({ isOpen, onClose, selectedCurrency, onSel
   if (!isOpen) return null;
 
   const filteredCurrencies = currencies.filter((currency) => {
+    // First, exclude currencies that are in the excludedCurrencies list
+    if (excludedCurrencies.includes(currency)) {
+      return false;
+    }
+    
     const query = searchQuery.toLowerCase();
     const currencyName = currency.toLowerCase();
     const packageAddress = currencyInfo[currency].packageAddress.toLowerCase();

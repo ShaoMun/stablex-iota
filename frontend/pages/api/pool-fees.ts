@@ -1,15 +1,15 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 
-// Pool contract addresses - Updated after redeployment with shared objects
-const POOL_PACKAGE_ID = '0x6ebf91f7fb200377491c41e9a81dbde911a93ff2f8ec7aaa0e3e21fe424c6514';
+// Pool contract addresses - Updated Dec 2024 with coin transfer logic
+const POOL_PACKAGE_ID = "0xe3a167fa29d171fc79d0b76534fcd8fa86e719177e732373fb9e004076e16a0f";
 const POOL_MODULE = 'sbx_pool';
 const POOL_STRUCT = 'Pool';
 const REGISTRY_STRUCT = 'Registry';
 
-// Pool and Registry object IDs - Updated after redeployment as shared objects
+// Pool and Registry object IDs - Updated Dec 2024
 // These can be overridden with environment variables
-const POOL_OBJECT_ID = process.env.POOL_OBJECT_ID || '0x1f88410b6a652e5f9a31061d7eaa7939b12b3811606070bc2743470f3846756d';
-const REGISTRY_OBJECT_ID = process.env.REGISTRY_OBJECT_ID || '0x967a22966d19e27ced4aea39e5ef90442aa94473b41123445bcd697beae1b5d6';
+const POOL_OBJECT_ID = "0xb107e62bfcfe4a1492212d3039e357aa443eba350a91963f2e74214e10c7e703";
+const REGISTRY_OBJECT_ID = "0x4cdef4b7bb87bd7abbae95dc8eb034fc88ab0ea78f252d333f2dcecb22e623be";
 
 // Currency price pairs for fetching prices
 const currencyPricePairs: Record<string, string> = {
