@@ -358,9 +358,32 @@ iota client call --package "$PACKAGE_ID" --module sbx_pool --function create_poo
 iota client call --package "$PACKAGE_ID" --module sbx_pool --function admin_set_whitelist --args "$REGISTRY" true true true --gas-budget 10000000
 ```
 
+## Recent Changes
+
+### Partial Migration Support (Latest Deployment)
+
+The contract now supports **partial migration** of individual currencies:
+
+- **New Function:** `transfer_partial_staking` - Migrate a specific currency (USDC, CHFX, TRYB, or SEKX) to a new account
+- **Legacy Function:** `transfer_account_and_staking` - Still available for full account migration (all currencies)
+- **Frontend:** The migrate page now allows users to select which currency to migrate
+- **Use Case:** Useful for splitting staking across multiple accounts or transferring specific currencies to different wallets
+
+**Function Signature:**
+```move
+public entry fun transfer_partial_staking(
+    source_account: &mut Account,
+    destination_address: address,
+    currency_type: u8, // 0 = USDC, 1 = CHFX, 2 = TRYB, 3 = SEKX
+    transfer_sbx: bool,
+    sbx_coin: Coin<SBX>,
+    ctx: &mut TxContext
+)
+```
+
 ---
 
-**Last Updated:** November 12, 2024  
+**Last Updated:** December 2024  
 **Network:** IOTA Testnet  
 **Package Edition:** Move 2024
 

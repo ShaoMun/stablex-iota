@@ -35,9 +35,9 @@ export default function SwapPage() {
   const snackbarTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Contract addresses - Updated Dec 2024 with coin transfer logic
-  const POOL_PACKAGE_ID = "0x40c40b62443cae9aad38015ae6f249fd748bd3159fb70f343c6b324bfaeed439";
-  const POOL_OBJECT_ID = "0x7ff52b80d8e117890a1d0a0d8d799d647ccd9bdecc37b0d928990fbd7415d263";
-  const REGISTRY_OBJECT_ID = "0x1dcceee0ed71718024a735d8ccf6047563583c723efb5dc1d241cf6f36b5f415";
+  const POOL_PACKAGE_ID = "0x1cf79de8cac02b52fa384df41e7712b5bfadeae2d097a818008780cf7d7783c6";
+  const POOL_OBJECT_ID = "0x8587158f53289362bb94530c6e174ae414e6eea32c9400cfc6da2704e80c5517";
+  const REGISTRY_OBJECT_ID = "0xb1e480f286dfb4e668235acca148be2ec901aedeed62d79aa4a1e5d01642c4ad";
 
   // Currency code mapping (0 = CHFX, 1 = TRYB, 2 = SEKX)
   const currencyCodes: Record<Currency, number> = {

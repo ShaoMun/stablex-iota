@@ -1360,6 +1360,76 @@ module first_package::sbx_pool {
         // Note: usdc_owed is not migrated (it's a separate debt mechanism)
     }
 
+    /// Transfer partial staking status for a specific currency and optionally SBX tokens
+    /// Currency type: 0 = USDC, 1 = CHFX, 2 = TRYB, 3 = SEKX
+    /// Only migrates the specified currency's staked amount
+    public entry fun transfer_partial_staking(
+        source_account: &mut Account,
+        destination_address: address,
+        currency_type: u8, // 0 = USDC, 1 = CHFX, 2 = TRYB, 3 = SEKX
+        transfer_sbx: bool,
+        sbx_coin: Coin<SBX>,
+        ctx: &mut TxContext
+    ) {
+        // Validate currency type
+        assert!(currency_type <= 3, E_BAD_PARAMS);
+        
+        // Extract the specific currency's staked amount
+        let staked_amount: u64;
+        if (currency_type == 0) {
+            // USDC
+            staked_amount = source_account.staked_usdc;
+            assert!(staked_amount > 0, E_NO_STAKING_STATUS);
+            source_account.staked_usdc = 0;
+        } else if (currency_type == 1) {
+            // CHFX
+            staked_amount = source_account.staked_chfx;
+            assert!(staked_amount > 0, E_NO_STAKING_STATUS);
+            source_account.staked_chfx = 0;
+        } else if (currency_type == 2) {
+            // TRYB
+            staked_amount = source_account.staked_tryb;
+            assert!(staked_amount > 0, E_NO_STAKING_STATUS);
+            source_account.staked_tryb = 0;
+        } else {
+            // SEKX
+            staked_amount = source_account.staked_sekx;
+            assert!(staked_amount > 0, E_NO_STAKING_STATUS);
+            source_account.staked_sekx = 0;
+        };
+        
+        // Create destination account with only the migrated currency's staking status
+        let migrated_usdc = if (currency_type == 0) staked_amount else 0;
+        let migrated_chfx = if (currency_type == 1) staked_amount else 0;
+        let migrated_tryb = if (currency_type == 2) staked_amount else 0;
+        let migrated_sekx = if (currency_type == 3) staked_amount else 0;
+        
+        let destination_account = Account {
+            id: object::new(ctx),
+            usdc_owed: 0,
+            staked_usdc: migrated_usdc,
+            staked_chfx: migrated_chfx,
+            staked_tryb: migrated_tryb,
+            staked_sekx: migrated_sekx,
+            last_yield_epoch: source_account.last_yield_epoch // Transfer epoch for consistency
+        };
+        
+        // Transfer new account to destination address
+        transfer::public_transfer(destination_account, destination_address);
+        
+        // Transfer SBX tokens if requested
+        if (transfer_sbx) {
+            let sbx_amount = coin::value(&sbx_coin);
+            assert!(sbx_amount > 0, E_ZERO_AMOUNT);
+            transfer::public_transfer(sbx_coin, destination_address);
+        } else {
+            // Return the coin to sender if not transferring
+            transfer::public_transfer(sbx_coin, tx_context::sender(ctx));
+        };
+        
+        // Note: usdc_owed is not migrated (it's a separate debt mechanism)
+    }
+
     public fun stats(pool: &Pool): (u64, u64, u64, u64, bool) {
         (pool.usdc_reserve, pool.total_sbx_supply, pool.total_rc_liability, pool.fee_bps, pool.paused)
     }

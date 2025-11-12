@@ -319,18 +319,37 @@ All tokens and treasury caps are owned by:
 // The frontend automatically creates accounts when needed
 public entry fun create_account(ctx: &mut TxContext);
 
-// Migrate staking status from one account to another
+// Transfer all staking status from one account to a new account for destination address
 // Transfers all staked amounts (staked_usdc, staked_chfx, staked_tryb, staked_sekx)
-// from source_account to destination_account
+// from source_account to a new account created for destination_address
 // Requirements:
 // - Only the owner of source_account can migrate
-// - Destination account must exist (created via create_account)
 // - Source account must have some staking status to migrate
-// After migration, destination account can unstake if they have corresponding SBX tokens
-public entry fun migrate_staking_status(
+// - Optionally transfers SBX tokens along with staking status
+// After migration, the new account can unstake if they have corresponding SBX tokens
+public entry fun transfer_account_and_staking(
     source_account: &mut Account,
-    destination_account: &mut Account,
-    ctx: &TxContext
+    destination_address: address,
+    transfer_sbx: bool,
+    sbx_coin: Coin<SBX>,
+    ctx: &mut TxContext
+);
+
+// Transfer partial staking status for a specific currency to a new account
+// Only migrates the selected currency's staked amount (not all currencies)
+// Currency type: 0 = USDC, 1 = CHFX, 2 = TRYB, 3 = SEKX
+// Requirements:
+// - Only the owner of source_account can migrate
+// - Source account must have staking status for the selected currency
+// - Optionally transfers SBX tokens along with staking status
+// After migration, the new account can unstake the migrated currency if they have corresponding SBX tokens
+public entry fun transfer_partial_staking(
+    source_account: &mut Account,
+    destination_address: address,
+    currency_type: u8, // 0 = USDC, 1 = CHFX, 2 = TRYB, 3 = SEKX
+    transfer_sbx: bool,
+    sbx_coin: Coin<SBX>,
+    ctx: &mut TxContext
 );
 ```
 
@@ -648,6 +667,8 @@ public fun coverage_bps(
 - ✅ `stake_usdc`, `stake_chfx`, `stake_tryb`, `stake_sekx` - All staking functions working
 - ✅ `unstake_usdc`, `unstake_chfx`, `unstake_tryb`, `unstake_sekx` - All unstake functions working with coin transfers
 - ✅ `swap_regional` - Direct A→B swaps between regional stablecoins working
+- ✅ `transfer_account_and_staking` - Full account migration (all currencies) with optional SBX transfer
+- ✅ `transfer_partial_staking` - Partial migration (single currency) with optional SBX transfer
 - ✅ Coin transfers - Coins properly split, transferred to pool during staking, and transferred to users during unstaking
 - ✅ SBX minting/burning - SBX tokens minted 1:1 with USD value on stake, burned on unstake
 - ✅ Real-time fee calculation - Network fees, deposit fees, swap fees, and unstake fees with depth-aware pricing
@@ -704,6 +725,8 @@ first_package = "0x0"
 - ✅ **Transaction Status**: Snackbar notifications with explorer links
 - ✅ **Balance Refresh**: Automatic balance updates in CurrencyModal after transactions
 - ✅ **Staked Amount Display**: StakedCurrencyModal shows staked amounts from user's Account object
+- ✅ **Partial Migration**: Migrate individual currencies (USDC, CHFX, TRYB, SEKX) to different accounts
+- ✅ **Full Migration**: Transfer all staking status to a new account (legacy function)
 
 ### Technical Implementation (✅ Complete)
 - ✅ Token creation (CHFX, TRYB, SEKX, USDC, JPYC, MYRC, XSGD)
