@@ -11,8 +11,8 @@ interface StakedCurrencyModalProps {
   onSelect: (currency: Currency) => void;
 }
 
-const POOL_PACKAGE_ID = "0x05c4be9ea7e0ab044c923099fa41f94f524fd29339f0b2447373574377b2a20e";
-const POOL_OBJECT_ID = "0xb727a10b1d354bd1f4b7f19152aee6fbf33bafcf9e741560a34bdaa0365fd189";
+const POOL_PACKAGE_ID = "0x40c40b62443cae9aad38015ae6f249fd748bd3159fb70f343c6b324bfaeed439";
+const POOL_OBJECT_ID = "0x7ff52b80d8e117890a1d0a0d8d799d647ccd9bdecc37b0d928990fbd7415d263";
 
 const currencies: Currency[] = ["USDC", "CHFX", "TRYB", "SEKX"];
 

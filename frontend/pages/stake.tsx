@@ -40,10 +40,10 @@ export default function StakePage() {
   const snackbarTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Contract addresses - Updated after redeployment with shared objects
-  const POOL_PACKAGE_ID = '0x05c4be9ea7e0ab044c923099fa41f94f524fd29339f0b2447373574377b2a20e';
+  const POOL_PACKAGE_ID = '0x40c40b62443cae9aad38015ae6f249fd748bd3159fb70f343c6b324bfaeed439';
   // Pool and Registry created as shared objects - Updated Dec 2024 with coin transfer logic
-  const POOL_OBJECT_ID = process.env.NEXT_PUBLIC_POOL_OBJECT_ID || "0xb727a10b1d354bd1f4b7f19152aee6fbf33bafcf9e741560a34bdaa0365fd189";
-  const REGISTRY_OBJECT_ID = process.env.NEXT_PUBLIC_REGISTRY_OBJECT_ID || "0x911ad622c7b733650e06a609ee8bb808d4a6ff184cd15ce731b5033c036e914d";
+  const POOL_OBJECT_ID = process.env.NEXT_PUBLIC_POOL_OBJECT_ID || "0x7ff52b80d8e117890a1d0a0d8d799d647ccd9bdecc37b0d928990fbd7415d263";
+  const REGISTRY_OBJECT_ID = process.env.NEXT_PUBLIC_REGISTRY_OBJECT_ID || "0x1dcceee0ed71718024a735d8ccf6047563583c723efb5dc1d241cf6f36b5f415";
 
   const { mutate: signAndExecuteTransaction, mutateAsync: signAndExecuteTransactionAsync } = useSignAndExecuteTransaction({
     onSuccess: (result) => {
@@ -730,19 +730,35 @@ export default function StakePage() {
       const depositFeeBps = 10;
       
       if (selectedCurrency === 'USDC') {
-        // Stake USDC - contract takes amount: u64 (not a Coin)
-        // For USDC, we still need to transfer coins to the pool since the function doesn't consume a coin
+        // Stake USDC - contract now accepts Coin<USDC>
+        // Prepare USDC coin for staking
+        let usdcCoin: any;
         const firstCoin = txb.object(coinObjects[0]);
         
-        // Split the exact amount needed (if not using the whole coin)
-        if (coinObjects.length === 1 && amountsToSplit[0] === BigInt(coins.data.find(c => c.coinObjectId === coinObjects[0])?.balance || 0)) {
-          // Using the whole coin - transfer it directly to the pool
-          txb.transferObjects([firstCoin], POOL_OBJECT_ID);
+        if (coinObjects.length === 1) {
+          const coinBalance = BigInt(coins.data.find(c => c.coinObjectId === coinObjects[0])?.balance || 0);
+          if (coinBalance === amountMicro) {
+            // Exact amount - use whole coin
+            usdcCoin = firstCoin;
+          } else {
+            // Split to get exact amount
+            txb.splitCoins(firstCoin, [amountMicro]);
+            usdcCoin = { $kind: 'NestedResult' as const, NestedResult: [0, 0] };
+          }
         } else {
-          // Split the exact amount and transfer the split coin to the pool
-          txb.splitCoins(firstCoin, [amountMicro]);
-          const splitCoinRef = { $kind: 'NestedResult' as const, NestedResult: [0, 0] };
-          txb.transferObjects([splitCoinRef as any], POOL_OBJECT_ID);
+          // Multiple coins - merge all into first coin, then split to exact amount
+          const coinRefs = coinObjects.map(id => txb.object(id));
+          const primaryCoin = coinRefs[0];
+          
+          // Merge all other coins into the primary coin
+          for (let i = 1; i < coinRefs.length; i++) {
+            txb.mergeCoins(primaryCoin, coinRefs[i]);
+          }
+          
+          // Split to get exact amount
+          const splitCommandIndex = coinRefs.length - 1;
+          txb.splitCoins(primaryCoin, [amountMicro]);
+          usdcCoin = { $kind: 'NestedResult' as const, NestedResult: [splitCommandIndex, 0] };
         }
         
         txb.moveCall({
@@ -751,7 +767,7 @@ export default function StakePage() {
             accountRef, // account (owned by user, mutable)
             poolRef, // pool (shared, mutable)
             registryRef, // registry (shared, immutable)
-            txb.pure.u64(amountMicro), // amount
+            usdcCoin, // usdc_coin: Coin<USDC>
             txb.pure.u64(Math.floor(chfxPriceMu)), // chfx_price_microusd
             txb.pure.u64(Math.floor(trybPriceMu)), // tryb_price_microusd
             txb.pure.u64(Math.floor(sekxPriceMu)), // sekx_price_microusd

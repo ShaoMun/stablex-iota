@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 import { ReactNode, useState, useEffect, useRef } from "react";
 import { useCurrentAccount, useCurrentWallet, useDisconnectWallet, ConnectModal, useIotaClientContext } from "@iota/dapp-kit";
 
-type Tab = "stake" | "swap" | "migrate" | "unstake";
+type Tab = "stake" | "swap" | "migrate" | "unstake" | "withdraw";
 
 interface AppLayoutProps {
   children: ReactNode;
@@ -12,7 +12,7 @@ interface AppLayoutProps {
 
 export default function AppLayout({ children, activeTab }: AppLayoutProps) {
   const router = useRouter();
-  const tabs: Tab[] = ["stake", "swap", "migrate", "unstake"];
+  const tabs: Tab[] = ["stake", "swap", "migrate", "unstake", "withdraw"];
   const currentAccount = useCurrentAccount();
   const currentWallet = useCurrentWallet();
   const iotaClientContext = useIotaClientContext();
@@ -94,6 +94,8 @@ export default function AppLayout({ children, activeTab }: AppLayoutProps) {
       router.push('/migrate');
     } else if (tab === "unstake") {
       router.push('/unstake');
+    } else if (tab === "withdraw") {
+      router.push('/withdraw');
     }
   };
 

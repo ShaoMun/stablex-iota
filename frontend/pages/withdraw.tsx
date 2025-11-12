@@ -1,31 +1,23 @@
 import { useState, useEffect, useRef } from "react";
-import StakedCurrencyModal from "@/components/StakedCurrencyModal";
 import AppLayout from "@/components/AppLayout";
 import FAQ from "@/components/FAQ";
 import { useCurrentAccount, ConnectModal, useSignAndExecuteTransaction, useIotaClient } from "@iota/dapp-kit";
 import { Transaction } from "@iota/iota-sdk/transactions";
 
-type Currency = "USDC" | "CHFX" | "TRYB" | "SEKX";
-
-export default function UnstakePage() {
-  const [toCurrency, setToCurrency] = useState<Currency>("USDC");
+export default function WithdrawPage() {
   const [sbxAmount, setSbxAmount] = useState<string>("0");
   const [toAmount, setToAmount] = useState<string>("0");
-  const [isToCurrencyModalOpen, setIsToCurrencyModalOpen] = useState(false);
   const [sbxBalance, setSbxBalance] = useState<string>("0.000000");
-  const [toCurrencyPrice, setToCurrencyPrice] = useState<number>(0);
-  const [loadingToPrice, setLoadingToPrice] = useState<boolean>(false);
   const [unstakeFeeBps, setUnstakeFeeBps] = useState<number>(0);
   const [unstakeTier, setUnstakeTier] = useState<1 | 2 | null>(null);
   const [loadingUnstakeRate, setLoadingUnstakeRate] = useState<boolean>(false);
-  const [unstakeToPriceMu, setUnstakeToPriceMu] = useState<number>(0);
   const [isMounted, setIsMounted] = useState<boolean>(false);
   
   const currentAccount = useCurrentAccount();
   const isWalletConnected = !!currentAccount;
   const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
   const client = useIotaClient();
-  const [isUnstaking, setIsUnstaking] = useState(false);
+  const [isWithdrawing, setIsWithdrawing] = useState(false);
   const [snackbar, setSnackbar] = useState<{ show: boolean; digest?: string; error?: boolean; message?: string }>({ show: false });
   const snackbarTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -35,16 +27,12 @@ export default function UnstakePage() {
   const REGISTRY_OBJECT_ID = "0x1dcceee0ed71718024a735d8ccf6047563583c723efb5dc1d241cf6f36b5f415";
   const SBX_COIN_TYPE = `${POOL_PACKAGE_ID}::sbx::SBX`;
 
-  // Currency code mapping (0 = CHFX, 1 = TRYB, 2 = SEKX)
-  const currencyCodes: Record<Currency, number> = {
-    USDC: -1, // USDC doesn't have a code, it's handled separately
-    CHFX: 0,
-    TRYB: 1,
-    SEKX: 2,
-  };
+  // Fixed currency for withdraw: SBX -> USDC
+  const toCurrency = "USDC" as const;
+  const toCurrencyPrice = 1.00; // USDC is always 1:1 with USD
 
   // Currency to price pair mapping
-  const currencyPricePairs: Record<Currency, string> = {
+  const currencyPricePairs: Record<string, string> = {
     USDC: 'USDC-USD',
     CHFX: 'USD-CHF',
     TRYB: 'USD-TRY',
@@ -53,7 +41,7 @@ export default function UnstakePage() {
 
   const { mutate: signAndExecuteTransaction } = useSignAndExecuteTransaction({
     onSuccess: (result) => {
-      setIsUnstaking(false);
+      setIsWithdrawing(false);
       setSnackbar({ show: true, digest: result.digest, error: false });
       if (snackbarTimeoutRef.current) {
         clearTimeout(snackbarTimeoutRef.current);
@@ -61,13 +49,13 @@ export default function UnstakePage() {
       snackbarTimeoutRef.current = setTimeout(() => {
         setSnackbar({ show: false });
       }, 5000);
-      // Refresh SBX balance after successful unstake
+      // Refresh SBX balance after successful withdraw
       fetchSbxBalance();
     },
     onError: (error) => {
       try {
         console.error('Transaction failed:', error);
-        setIsUnstaking(false);
+        setIsWithdrawing(false);
         
         let errorMessage = 'Unknown error';
         try {
@@ -102,7 +90,7 @@ export default function UnstakePage() {
         }, 5000);
       } catch (handlerError) {
         console.error('Error in error handler:', handlerError);
-        setIsUnstaking(false);
+        setIsWithdrawing(false);
         setSnackbar({ show: true, error: true, message: 'Transaction cancelled' });
         if (snackbarTimeoutRef.current) {
           clearTimeout(snackbarTimeoutRef.current);
@@ -114,7 +102,7 @@ export default function UnstakePage() {
     },
   });
 
-  // Fetch SBX balance from wallet
+  // Fetch SBX balance from wallet (excluding USDC positions)
   const fetchSbxBalance = async () => {
     if (!currentAccount || !client) {
       setSbxBalance("0.000000");
@@ -122,18 +110,49 @@ export default function UnstakePage() {
     }
 
     try {
+      // Get total SBX balance
       const coins = await client.getCoins({
         owner: currentAccount.address,
         coinType: SBX_COIN_TYPE,
       });
 
+      let totalBalance = BigInt(0);
       if (coins.data && coins.data.length > 0) {
-        const totalBalance = coins.data.reduce((sum, coin) => sum + BigInt(coin.balance || 0), BigInt(0));
-        const balanceNum = Number(totalBalance) / 1_000_000;
-        setSbxBalance(balanceNum.toFixed(6));
-      } else {
-        setSbxBalance("0.000000");
+        totalBalance = coins.data.reduce((sum, coin) => sum + BigInt(coin.balance || 0), BigInt(0));
       }
+
+      // Get account object to check USDC deposits
+      let usdcStakedAmount = BigInt(0);
+      try {
+        const accountObjects = await client.getOwnedObjects({
+          owner: currentAccount.address,
+          filter: { StructType: `${POOL_PACKAGE_ID}::sbx_pool::Account` },
+          options: { showContent: true, showType: true },
+        });
+
+        if (accountObjects.data && accountObjects.data.length > 0) {
+          const accountData = accountObjects.data[0].data?.content;
+          if (accountData && 'fields' in accountData) {
+            const stakedUsdc = accountData.fields?.staked_usdc;
+            if (stakedUsdc) {
+              usdcStakedAmount = BigInt(stakedUsdc);
+            }
+          }
+        }
+      } catch (accountError) {
+        // If account doesn't exist or error fetching, assume no USDC deposits
+        console.log('No account found or error fetching account:', accountError);
+      }
+
+      // Calculate withdrawable balance: total SBX minus USDC-staked amount
+      // Note: staked_usdc is the original USDC amount, but SBX was minted after deposit fees
+      // We use staked_usdc as an upper bound to be conservative
+      const withdrawableBalance = totalBalance > usdcStakedAmount 
+        ? totalBalance - usdcStakedAmount 
+        : BigInt(0);
+      
+      const balanceNum = Number(withdrawableBalance) / 1_000_000;
+      setSbxBalance(balanceNum.toFixed(6));
     } catch (error) {
       console.error('Error fetching SBX balance:', error);
       setSbxBalance("0.000000");
@@ -157,66 +176,17 @@ export default function UnstakePage() {
     }
   }, [isWalletConnected, currentAccount, client]);
 
-  // Fetch price for toCurrency
+  // Calculate withdraw rate using the pool contract logic
   useEffect(() => {
-    if (!toCurrency) {
-      setToCurrencyPrice(0);
-      return;
-    }
-
-    const fetchPrice = async () => {
-      setLoadingToPrice(true);
-      try {
-        const pair = currencyPricePairs[toCurrency];
-        const response = await fetch(`/api/currency-price?pair=${pair}`);
-        
-        if (response.ok) {
-          const data = await response.json();
-          if (data.price) {
-            let priceInUSD = data.price;
-            
-            if (toCurrency !== 'USDC') {
-              priceInUSD = data.price > 0 ? 1 / data.price : 0;
-            }
-            
-            setToCurrencyPrice(priceInUSD);
-          } else {
-            setToCurrencyPrice(toCurrency === 'USDC' ? 1.00 : 0);
-          }
-        } else {
-          setToCurrencyPrice(toCurrency === 'USDC' ? 1.00 : 0);
-        }
-      } catch (error) {
-        console.error(`Error fetching ${toCurrency} price:`, error);
-        setToCurrencyPrice(toCurrency === 'USDC' ? 1.00 : 0);
-      } finally {
-        setLoadingToPrice(false);
-      }
-    };
-
-    fetchPrice();
-  }, [toCurrency]);
-
-  // Calculate unstake rate using the pool contract logic
-  useEffect(() => {
-    if (!toCurrency) {
-      setToAmount("0");
-      setUnstakeFeeBps(0);
-      setUnstakeTier(null);
-      setUnstakeToPriceMu(0);
-      return;
-    }
-
     const amount = parseFloat(sbxAmount) || 0;
     if (amount === 0) {
       setToAmount("0");
       setUnstakeFeeBps(0);
       setUnstakeTier(null);
-      setUnstakeToPriceMu(0);
       return;
     }
 
-    const calculateUnstakeRate = async () => {
+    const calculateWithdrawRate = async () => {
       setLoadingUnstakeRate(true);
       try {
         const response = await fetch(
@@ -228,61 +198,97 @@ export default function UnstakePage() {
           setToAmount(data.amountOut.toFixed(6));
           setUnstakeFeeBps(data.feeBps);
           setUnstakeTier(data.tier);
-          if (data.toPriceMu) {
-            setUnstakeToPriceMu(data.toPriceMu);
-          }
         } else {
           const errorData = await response.json().catch(() => ({ error: response.statusText }));
-          console.error('Failed to fetch unstake rate:', response.status, errorData);
+          console.error('Failed to fetch withdraw rate:', response.status, errorData);
           
           // Fallback to simple calculation if API fails
-          if (toCurrencyPrice > 0) {
-            // SBX is 1:1 with USD, so amountOut = amount * toCurrencyPrice (before fees)
-            const calculatedAmount = amount * toCurrencyPrice * 0.997; // Apply 0.3% fee
-            setToAmount(calculatedAmount.toFixed(6));
-            setUnstakeFeeBps(30); // Default 0.3%
-            setUnstakeTier(1);
-          } else {
-            setToAmount("0");
-            if (unstakeFeeBps === 0) {
-              setUnstakeFeeBps(30);
-            }
-            setUnstakeTier(null);
-          }
+          // SBX is 1:1 with USD, so amountOut = amount * 1.00 (before fees)
+          const calculatedAmount = amount * 0.997; // Apply 0.3% fee
+          setToAmount(calculatedAmount.toFixed(6));
+          setUnstakeFeeBps(30); // Default 0.3%
+          setUnstakeTier(1);
         }
       } catch (error) {
-        console.error('Error calculating unstake rate:', error);
-        if (toCurrencyPrice > 0) {
-          const calculatedAmount = amount * toCurrencyPrice * 0.997;
-          setToAmount(calculatedAmount.toFixed(6));
-          setUnstakeFeeBps(30);
-          setUnstakeTier(1);
-        } else {
-          setToAmount("0");
-          setUnstakeFeeBps(0);
-          setUnstakeTier(null);
-        }
+        console.error('Error calculating withdraw rate:', error);
+        const calculatedAmount = amount * 0.997;
+        setToAmount(calculatedAmount.toFixed(6));
+        setUnstakeFeeBps(30);
+        setUnstakeTier(1);
       } finally {
         setLoadingUnstakeRate(false);
       }
     };
 
-    calculateUnstakeRate();
-  }, [sbxAmount, toCurrency, toCurrencyPrice]);
+    calculateWithdrawRate();
+  }, [sbxAmount]);
 
   const handleConnectWallet = () => {
     setIsConnectModalOpen(true);
   };
 
-  const handlePercentageClick = (percentage: number) => {
-    const balance = parseFloat(sbxBalance) || 0;
-    const amount = (balance * percentage) / 100;
-    setSbxAmount(amount.toFixed(6));
+  const handlePercentageClick = async (percentage: number) => {
+    if (!currentAccount || !client) return;
+    
+    try {
+      // Get total SBX balance
+      const coins = await client.getCoins({
+        owner: currentAccount.address,
+        coinType: SBX_COIN_TYPE,
+      });
+
+      let totalBalance = BigInt(0);
+      if (coins.data && coins.data.length > 0) {
+        totalBalance = coins.data.reduce((sum, coin) => sum + BigInt(coin.balance || 0), BigInt(0));
+      }
+
+      // Get account object to check USDC deposits
+      let usdcStakedAmount = BigInt(0);
+      try {
+        const accountObjects = await client.getOwnedObjects({
+          owner: currentAccount.address,
+          filter: { StructType: `${POOL_PACKAGE_ID}::sbx_pool::Account` },
+          options: { showContent: true, showType: true },
+        });
+
+        if (accountObjects.data && accountObjects.data.length > 0) {
+          const accountData = accountObjects.data[0].data?.content;
+          if (accountData && 'fields' in accountData) {
+            const stakedUsdc = accountData.fields?.staked_usdc;
+            if (stakedUsdc) {
+              usdcStakedAmount = BigInt(stakedUsdc);
+            }
+          }
+        }
+      } catch (accountError) {
+        // If account doesn't exist or error fetching, assume no USDC deposits
+        console.log('No account found or error fetching account:', accountError);
+      }
+
+      // Calculate withdrawable balance: total SBX minus USDC-staked amount
+      const withdrawableBalance = totalBalance > usdcStakedAmount 
+        ? totalBalance - usdcStakedAmount 
+        : BigInt(0);
+      
+      const withdrawableNum = Number(withdrawableBalance) / 1_000_000;
+      const targetAmount = (withdrawableNum * percentage) / 100;
+      
+      // Cap at withdrawable balance
+      const finalAmount = Math.min(targetAmount, withdrawableNum);
+      
+      setSbxAmount(finalAmount.toFixed(6));
+    } catch (error) {
+      console.error('Error calculating percentage amount:', error);
+      // Fallback to simple calculation using displayed balance
+      const balance = parseFloat(sbxBalance) || 0;
+      const amount = (balance * percentage) / 100;
+      setSbxAmount(amount.toFixed(6));
+    }
   };
 
-  const handleUnstake = async () => {
-    if (!currentAccount || !client || !toCurrency) {
-      alert("Please connect your wallet and select a currency");
+  const handleWithdraw = async () => {
+    if (!currentAccount || !client) {
+      alert("Please connect your wallet");
       return;
     }
 
@@ -293,11 +299,11 @@ export default function UnstakePage() {
     }
 
     if (unstakeFeeBps === 0) {
-      alert("Please wait for unstake rate calculation");
+      alert("Please wait for withdraw rate calculation");
       return;
     }
 
-    setIsUnstaking(true);
+    setIsWithdrawing(true);
 
     try {
       // Convert amount to micro units (6 decimals)
@@ -312,15 +318,25 @@ export default function UnstakePage() {
 
       if (!accountObjects.data || accountObjects.data.length === 0) {
         alert("Please create an account first by staking");
-        setIsUnstaking(false);
+        setIsWithdrawing(false);
         return;
       }
 
       const accountObjectId = accountObjects.data[0].data?.objectId;
       if (!accountObjectId) {
         alert("Failed to get account object");
-        setIsUnstaking(false);
+        setIsWithdrawing(false);
         return;
+      }
+
+      // Get account data to check USDC deposits
+      const accountData = accountObjects.data[0].data?.content;
+      let usdcStakedAmount = BigInt(0);
+      if (accountData && 'fields' in accountData) {
+        const stakedUsdc = accountData.fields?.staked_usdc;
+        if (stakedUsdc) {
+          usdcStakedAmount = BigInt(stakedUsdc);
+        }
       }
 
       // Get SBX coin objects
@@ -331,15 +347,27 @@ export default function UnstakePage() {
 
       if (!coins.data || coins.data.length === 0) {
         alert("No SBX tokens found in your wallet");
-        setIsUnstaking(false);
+        setIsWithdrawing(false);
         return;
       }
 
       // Calculate total balance
       const totalBalance = coins.data.reduce((sum, coin) => sum + BigInt(coin.balance || 0), BigInt(0));
-      if (totalBalance < amountMicro) {
-        alert(`Insufficient SBX balance. You have ${Number(totalBalance) / 1_000_000} SBX`);
-        setIsUnstaking(false);
+      
+      // Calculate withdrawable balance (excluding USDC positions)
+      const withdrawableBalance = totalBalance > usdcStakedAmount 
+        ? totalBalance - usdcStakedAmount 
+        : BigInt(0);
+      
+      // Check if user has sufficient withdrawable balance
+      if (amountMicro > withdrawableBalance) {
+        const withdrawableBalanceNum = Number(withdrawableBalance) / 1_000_000;
+        if (usdcStakedAmount > 0) {
+          alert(`Insufficient withdrawable balance. You have ${withdrawableBalanceNum.toFixed(6)} SBX available for USDC withdrawal (excluding USDC deposits).`);
+        } else {
+          alert(`Insufficient SBX balance. You have ${withdrawableBalanceNum.toFixed(6)} SBX available.`);
+        }
+        setIsWithdrawing(false);
         return;
       }
 
@@ -355,14 +383,14 @@ export default function UnstakePage() {
       const currencies = ['CHFX', 'TRYB', 'SEKX'];
       
       for (const curr of currencies) {
-        const pair = currencyPricePairs[curr as Currency];
+        const pair = currencyPricePairs[curr];
         pricePromises.push(
           fetch(`/api/currency-price?pair=${pair}`)
             .then(res => res.json())
             .then(data => {
               // Convert to micro-USD (invert for non-USDC)
               const price = data.price || 0;
-              return curr === 'USDC' ? price * 1_000_000 : (1 / price) * 1_000_000;
+              return (1 / price) * 1_000_000;
             })
             .catch(() => 0)
         );
@@ -372,85 +400,81 @@ export default function UnstakePage() {
 
       if (chfxPriceMu === 0 || trybPriceMu === 0 || sekxPriceMu === 0) {
         alert("Failed to fetch currency prices. Please try again.");
-        setIsUnstaking(false);
+        setIsWithdrawing(false);
         return;
       }
 
-      // Get SBX coin object
-      const coinObject = coins.data[0];
-      const coinObjectId = coinObject.coinObjectId;
-      const coinBalance = BigInt(coinObject.balance || 0);
-      
-      // Split coin if needed to get exact amount
-      const firstCoin = txb.object(coinObjectId);
+      // Prepare SBX coin for burning
+      // Collect coins until we have enough balance, merge them, then split to exact amount
       let coinToBurn: any;
       
-      if (coinBalance === amountMicro) {
-        // Exact amount - use whole coin
-        coinToBurn = firstCoin;
-      } else if (coinBalance > amountMicro) {
-        // Split to get exact amount
-        txb.splitCoins(firstCoin, [amountMicro]);
-        coinToBurn = { $kind: 'NestedResult' as const, NestedResult: [0, 0] };
-      } else {
-        throw new Error(`Insufficient balance: need ${amountMicro}, have ${coinBalance}`);
+      // Find coins that cover the needed amount
+      let remaining = amountMicro;
+      const coinsToUse: typeof coins.data = [];
+      
+      for (const coin of coins.data) {
+        if (remaining <= 0) break;
+        const coinValue = BigInt(coin.balance || 0);
+        if (coinValue > 0) {
+          coinsToUse.push(coin);
+          remaining -= coinValue > remaining ? remaining : coinValue;
+        }
       }
       
-      // Call unstake function based on currency
-      // All functions require: account, pool, registry, sbx_coin, chfx_price, tryb_price, sekx_price
-      if (toCurrency === 'USDC') {
-        txb.moveCall({
-          target: `${POOL_PACKAGE_ID}::sbx_pool::unstake_usdc`,
-          arguments: [
-            accountRef,
-            poolRef,
-            registryRef,
-            coinToBurn,
-            txb.pure.u64(Math.floor(chfxPriceMu)),
-            txb.pure.u64(Math.floor(trybPriceMu)),
-            txb.pure.u64(Math.floor(sekxPriceMu)),
-          ],
-        });
-      } else if (toCurrency === 'CHFX') {
-        txb.moveCall({
-          target: `${POOL_PACKAGE_ID}::sbx_pool::unstake_chfx`,
-          arguments: [
-            accountRef,
-            poolRef,
-            registryRef,
-            coinToBurn,
-            txb.pure.u64(Math.floor(chfxPriceMu)),
-            txb.pure.u64(Math.floor(trybPriceMu)),
-            txb.pure.u64(Math.floor(sekxPriceMu)),
-          ],
-        });
-      } else if (toCurrency === 'TRYB') {
-        txb.moveCall({
-          target: `${POOL_PACKAGE_ID}::sbx_pool::unstake_tryb`,
-          arguments: [
-            accountRef,
-            poolRef,
-            registryRef,
-            coinToBurn,
-            txb.pure.u64(Math.floor(chfxPriceMu)),
-            txb.pure.u64(Math.floor(trybPriceMu)),
-            txb.pure.u64(Math.floor(sekxPriceMu)),
-          ],
-        });
-      } else if (toCurrency === 'SEKX') {
-        txb.moveCall({
-          target: `${POOL_PACKAGE_ID}::sbx_pool::unstake_sekx`,
-          arguments: [
-            accountRef,
-            poolRef,
-            registryRef,
-            coinToBurn,
-            txb.pure.u64(Math.floor(chfxPriceMu)),
-            txb.pure.u64(Math.floor(trybPriceMu)),
-            txb.pure.u64(Math.floor(sekxPriceMu)),
-          ],
-        });
+      if (remaining > 0) {
+        throw new Error(`Insufficient SBX balance: need ${amountMicro}, but don't have enough coins`);
       }
+      
+      if (coinsToUse.length === 1) {
+        // Single coin - split if needed
+        const coinObject = coinsToUse[0];
+        const coinObjectId = coinObject.coinObjectId;
+        const coinBalance = BigInt(coinObject.balance || 0);
+        const coinRef = txb.object(coinObjectId);
+        
+        if (coinBalance === amountMicro) {
+          // Exact amount - use whole coin
+          coinToBurn = coinRef;
+        } else {
+          // Split to get exact amount
+          txb.splitCoins(coinRef, [amountMicro]);
+          coinToBurn = { $kind: 'NestedResult' as const, NestedResult: [0, 0] };
+        }
+      } else {
+        // Multiple coins - merge all into first coin, then split to exact amount
+        const coinRefs = coinsToUse.map(coin => txb.object(coin.coinObjectId));
+        const primaryCoin = coinRefs[0];
+        
+        // Merge all other coins into the primary coin
+        // Each mergeCoins creates a command, so we need to track the command index
+        for (let i = 1; i < coinRefs.length; i++) {
+          txb.mergeCoins(primaryCoin, coinRefs[i]);
+        }
+        
+        // Split to get exact amount
+        // splitCoins is at index = number of merge operations
+        const splitCommandIndex = coinRefs.length - 1;
+        txb.splitCoins(primaryCoin, [amountMicro]);
+        coinToBurn = { $kind: 'NestedResult' as const, NestedResult: [splitCommandIndex, 0] };
+      }
+      
+      // Call unstake_usdc function: burns SBX and transfers USDC to user
+      // The contract function will:
+      // 1. Burn the SBX tokens (reduce total_sbx_supply)
+      // 2. Calculate USDC payout (after fees)
+      // 3. Transfer USDC from pool reserves to connected wallet
+      txb.moveCall({
+        target: `${POOL_PACKAGE_ID}::sbx_pool::unstake_usdc`,
+        arguments: [
+          accountRef,
+          poolRef,
+          registryRef,
+          coinToBurn,
+          txb.pure.u64(Math.floor(chfxPriceMu)),
+          txb.pure.u64(Math.floor(trybPriceMu)),
+          txb.pure.u64(Math.floor(sekxPriceMu)),
+        ],
+      });
 
       // Execute transaction
       try {
@@ -459,7 +483,7 @@ export default function UnstakePage() {
         });
       } catch (syncError: any) {
         console.error('Synchronous error in signAndExecuteTransaction:', syncError);
-        setIsUnstaking(false);
+        setIsWithdrawing(false);
         
         const errorMessage = syncError?.message?.toLowerCase() || '';
         const isUserRejection = errorMessage.includes('rejected') || 
@@ -482,8 +506,8 @@ export default function UnstakePage() {
       }
     } catch (error: any) {
       try {
-        console.error('Unstake error:', error);
-        setIsUnstaking(false);
+        console.error('Withdraw error:', error);
+        setIsWithdrawing(false);
         
         let errorMessage = 'Unknown error';
         try {
@@ -495,13 +519,13 @@ export default function UnstakePage() {
             errorMessage = error.toString();
           }
         } catch (e) {
-          errorMessage = 'Unstake failed';
+          errorMessage = 'Withdraw failed';
         }
         
         setSnackbar({ 
           show: true, 
           error: true, 
-          message: `Unstake failed: ${errorMessage}` 
+          message: `Withdraw failed: ${errorMessage}` 
         });
         if (snackbarTimeoutRef.current) {
           clearTimeout(snackbarTimeoutRef.current);
@@ -511,8 +535,8 @@ export default function UnstakePage() {
         }, 5000);
       } catch (handlerError) {
         console.error('Error in error handler:', handlerError);
-        setIsUnstaking(false);
-        setSnackbar({ show: true, error: true, message: 'Unstake failed' });
+        setIsWithdrawing(false);
+        setSnackbar({ show: true, error: true, message: 'Withdraw failed' });
         if (snackbarTimeoutRef.current) {
           clearTimeout(snackbarTimeoutRef.current);
         }
@@ -533,7 +557,7 @@ export default function UnstakePage() {
   const feeUsd = (parseFloat(sbxAmount) || 0) * (unstakeFeeBps / 10000);
 
   return (
-    <AppLayout activeTab="unstake">
+    <AppLayout activeTab="withdraw">
       {/* Main Glass Card */}
       <div 
         className={`relative rounded-3xl backdrop-blur-xl overflow-hidden ${isMounted ? 'page-container-enter' : 'opacity-0'}`}
@@ -555,13 +579,13 @@ export default function UnstakePage() {
         <div className="p-8">
           {/* Title */}
           <h2 className="text-[22px] sm:text-2xl font-semibold text-white mb-7 leading-tight">
-            Unstake currencies
+            Withdraw USDC
           </h2>
 
-          {/* Amount to Unstake Container */}
+          {/* Amount to Withdraw Container */}
           <div className="bg-white/3 rounded-2xl border border-white/10 ring-1 ring-white/10 backdrop-blur-xl p-6 mb-4">
             <label className="text-zinc-400 text-[11px] font-medium mb-3 block uppercase tracking-wider">
-              AMOUNT TO UNSTAKE
+              AMOUNT TO WITHDRAW
             </label>
             <div className="flex items-start gap-3 mb-3">
               <div className="flex-1 min-w-0 relative">
@@ -582,16 +606,10 @@ export default function UnstakePage() {
                 <span className="absolute right-0 top-0 text-zinc-500 text-sm font-medium pt-1">SBX</span>
                 <p className="text-zinc-500 text-sm mt-2">${(parseFloat(sbxAmount) || 0).toFixed(2)}</p>
               </div>
-              <button
-                onClick={() => setIsToCurrencyModalOpen(true)}
-                className="px-4 py-2.5 rounded-full bg-white/10 text-white font-medium text-sm border border-white/15 hover:bg-white/15 transition-all flex items-center gap-2 flex-shrink-0 backdrop-blur-xl ring-1 ring-inset ring-white/10"
-              >
+              <div className="px-4 py-2.5 rounded-full bg-white/10 text-white font-medium text-sm border border-white/15 backdrop-blur-xl ring-1 ring-inset ring-white/10 flex items-center gap-2 flex-shrink-0">
                 <div className="w-5 h-5 rounded-full bg-gradient-to-br from-white/60 to-white/20 ring-1 ring-inset ring-white/40 flex-shrink-0" />
-                <span>{toCurrency}</span>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-zinc-400">
-                  <path d="M6 9l6 6 6-6" />
-                </svg>
-              </button>
+                <span>SBX</span>
+              </div>
             </div>
             
             {/* Percentage Buttons */}
@@ -657,10 +675,8 @@ export default function UnstakePage() {
                         <span className="w-3 h-3 border border-zinc-500 border-t-transparent rounded-full animate-spin"></span>
                         Calculating...
                       </span>
-                    ) : toCurrency && toCurrencyPrice > 0 ? (
-                      `$${((parseFloat(toAmount) || 0) * toCurrencyPrice).toFixed(2)}`
                     ) : (
-                      "$0.00"
+                      `$${(parseFloat(toAmount) || 0).toFixed(2)}`
                     )}
                   </p>
                   {unstakeFeeBps > 0 && unstakeTier && (
@@ -695,13 +711,13 @@ export default function UnstakePage() {
             </p>
           </div>
 
-          {/* Connect Wallet / Unstake Button */}
+          {/* Connect Wallet / Withdraw Button */}
           <button
-            onClick={isWalletConnected ? handleUnstake : handleConnectWallet}
-            disabled={isUnstaking || !toCurrency || parseFloat(sbxAmount) <= 0 || parseFloat(toAmount) <= 0 || loadingUnstakeRate}
+            onClick={isWalletConnected ? handleWithdraw : handleConnectWallet}
+            disabled={isWithdrawing || parseFloat(sbxAmount) <= 0 || parseFloat(toAmount) <= 0 || loadingUnstakeRate}
             className="w-full py-4 rounded-xl font-semibold text-black text-base transition-all bg-gradient-to-r from-zinc-200/80 to-white/70 hover:to-white ring-1 ring-inset ring-white/30 shadow-[0_4px_20px_rgba(255,255,255,0.12)] active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {isUnstaking ? "Unstaking..." : isWalletConnected ? "Unstake" : "Connect Wallet"}
+            {isWithdrawing ? "Withdrawing..." : isWalletConnected ? "Withdraw" : "Connect Wallet"}
           </button>
         </div>
       </div>
@@ -710,37 +726,26 @@ export default function UnstakePage() {
       <FAQ
         items={[
           {
-            question: "What are asymmetric withdrawal rules?",
-            answer: "Different rules for different depositors: If you deposited regional coins (CHFX, TRYB, SEKX), you can withdraw any regional coin OR USDC. If you deposited USDC, you can only withdraw regional coins, not USDC. This keeps the pool balanced."
+            question: "What is the difference between Withdraw and Unstake?",
+            answer: "Withdraw is a simplified interface for converting SBX to USDC. Unstake allows you to choose from multiple currencies (USDC, CHFX, TRYB, SEKX) based on your staking history."
           },
           {
             question: "Can I withdraw USDC?",
-            answer: "Only if you originally deposited regional stablecoins. If you deposited USDC, you cannot withdraw USDC—only regional coins. This prevents circular staking and maintains pool balance."
+            answer: "Yes, the Withdraw page allows you to convert SBX directly to USDC. This is useful for users who want a straightforward SBX to USDC conversion."
           },
           {
             question: "What fees apply to withdrawals?",
             answer: "Fees depend on pool depth: healthy pools pay 0.3% fee by default, while unhealthy pools (low liquidity) pay higher fees (up to 50%) to protect liquidity."
           },
           {
-            question: "How do I unlock my liquidity?",
-            answer: "Unstake your SBX tokens to get your funds back. You'll receive the USD value in your chosen currency (following withdrawal rules). The amount depends on current pool depth and fees."
+            question: "How do I withdraw my SBX?",
+            answer: "Enter the amount of SBX you want to withdraw, and you'll receive the equivalent value in USDC (minus fees). The amount depends on current pool depth and fees."
           },
           {
-            question: "Why can't USDC depositors withdraw USDC?",
-            answer: "This prevents people from staking USDC, earning yield, then immediately withdrawing USDC. USDC depositors get higher APY as compensation, while regional depositors get the benefit of USDC withdrawal."
+            question: "Why use Withdraw instead of Unstake?",
+            answer: "Withdraw provides a simpler, streamlined experience for SBX to USDC conversion. If you need to withdraw to other currencies or have specific staking requirements, use the Unstake page instead."
           }
         ]}
-      />
-
-      {/* Staked Currency Selection Modal */}
-      <StakedCurrencyModal
-        isOpen={isToCurrencyModalOpen}
-        onClose={() => setIsToCurrencyModalOpen(false)}
-        selectedCurrency={toCurrency}
-        onSelect={(currency) => {
-          setToCurrency(currency);
-          setIsToCurrencyModalOpen(false);
-        }}
       />
 
       {/* Wallet Connection Modal */}
@@ -795,3 +800,4 @@ export default function UnstakePage() {
     </AppLayout>
   );
 }
+

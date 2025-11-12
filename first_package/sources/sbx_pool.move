@@ -374,7 +374,7 @@ module first_package::sbx_pool {
     }
 
     /// Stake USDC, mint SBX at 1 SBX = 1 USD (micro-USD)
-    /// amount: USDC minimal units (6 decimals), equal to micro-USD
+    /// Consumes USDC coin and deposits it into pool reserves
     /// Prices are passed as parameters (queried from API off-chain)
     /// Records staked amount in account status
     /// Mints actual SBX tokens and transfers to user
@@ -384,15 +384,19 @@ module first_package::sbx_pool {
         account: &mut Account,
         pool: &mut Pool,
         registry: &Registry,
-        amount: u64,
+        usdc_coin: Coin<USDC>,
         chfx_price_microusd: u64,
         tryb_price_microusd: u64,
         sekx_price_microusd: u64,
         deposit_fee_bps: u64,
         ctx: &mut TxContext
     ) {
+        let amount = coin::value(&usdc_coin);
         assert!(amount > 0, E_ZERO_AMOUNT);
         assert!(!pool.paused, E_PAUSED);
+        
+        // Deposit USDC coin into pool reserves
+        balance::join(&mut pool.usdc_reserve_balance, coin::into_balance(usdc_coin));
         
         // Compute allocation
         let (usdc_reserve, mm_allocation, _usdc_allocation, _chfx_swap, _tryb_swap, _sekx_swap) = compute_usdc_allocation(
@@ -889,11 +893,11 @@ module first_package::sbx_pool {
         balance::join(&mut pool.usdc_reserve_balance, coin::into_balance(coin));
     }
 
-    /// Unstake USDC by burning SBX. Applies depth-aware fee.
-    /// Users can unstake anytime (before or after epoch completion).
-    /// Note: Users who unstake before epoch completion will not receive yield for that epoch.
-    /// Asymmetric withdrawal rule: User can only withdraw USDC if SBX > staked USDC.
-    /// This means USDC stakers cannot withdraw USDC (they can only withdraw regionals).
+    /// Withdraw USDC by burning SBX tokens.
+    /// All users can withdraw USDC regardless of their staking history.
+    /// Applies depth-aware fee based on pool utilization.
+    /// Users can withdraw anytime (before or after epoch completion).
+    /// Note: Users who withdraw before epoch completion will not receive yield for that epoch.
     /// Prices are passed as parameters (queried from API off-chain)
     /// User must pass SBX tokens to burn
     public entry fun unstake_usdc(
@@ -909,11 +913,6 @@ module first_package::sbx_pool {
         let sbx_amount = coin::value(&sbx_coin);
         assert!(sbx_amount > 0, E_ZERO_AMOUNT);
         assert!(!pool.paused, E_PAUSED);
-        
-        // Check user's SBX balance from coin
-        // Asymmetric withdrawal: User can only withdraw USDC if SBX > staked USDC
-        // This prevents USDC stakers from withdrawing USDC
-        assert!(sbx_amount > account.staked_usdc, E_USDC_DEPOSITOR_CANNOT_WITHDRAW_USDC);
 
         // Compute vault USD values
         let (usdc_mu_pre, chfx_mu_pre, tryb_mu_pre, sekx_mu_pre, total_mu_pre) = vault_usd(
@@ -959,10 +958,10 @@ module first_package::sbx_pool {
         let payout_coin = coin::from_balance(balance::split(&mut pool.usdc_reserve_balance, net_u64), ctx);
         transfer::public_transfer(payout_coin, tx_context::sender(ctx));
         
-        // Note: We don't reduce staked_usdc here because:
-        // - If user has SBX > staked_usdc, they're withdrawing yield (not original stake)
-        // - If user has SBX <= staked_usdc, they cannot withdraw USDC (check above prevents this)
-        // - Regional stakers can withdraw USDC but don't have staked_usdc, so nothing to reduce
+        // Note: All users can withdraw USDC by burning SBX tokens.
+        // The staked_usdc field is informational and tracks original USDC deposits,
+        // but does not restrict withdrawals. Users can withdraw any amount of USDC
+        // as long as they have sufficient SBX tokens to burn.
         
         // Accrue fee value per currency
         registry.fee_usd_accumulated_mu = registry.fee_usd_accumulated_mu + fee_usd_mu;
@@ -1239,23 +1238,24 @@ module first_package::sbx_pool {
         transfer::public_transfer(account, tx_context::sender(ctx));
     }
 
-    /// Migrate staking status from one account to another
+    /// Migrate staking status from one account to another address
     /// Transfers all staked amounts (staked_usdc, staked_chfx, staked_tryb, staked_sekx)
-    /// from source_account to destination_account
+    /// from source_account to destination address
+    /// Creates a new account for the destination if needed
     /// 
     /// Requirements:
     /// - Only the owner of source_account can migrate (must be sender)
-    /// - Destination account must exist (created via create_account)
     /// - Source account must have some staking status to migrate
     /// 
     /// After migration:
-    /// - Destination account can unstake if they have the corresponding SBX tokens
+    /// - Destination receives a new account with the staking status
+    /// - Destination can unstake if they have the corresponding SBX tokens
     /// - Source account's staked amounts are reset to 0
-    /// - last_yield_epoch is transferred to destination (uses the later epoch)
+    /// - last_yield_epoch is transferred to destination
     public entry fun migrate_staking_status(
         source_account: &mut Account,
-        destination_account: &mut Account,
-        ctx: &TxContext
+        destination_address: address,
+        ctx: &mut TxContext
     ) {
         // Verify sender owns the source account (in Move, this is implicit via object ownership)
         // The source_account must be passed as owned object, so only owner can call
@@ -1267,23 +1267,95 @@ module first_package::sbx_pool {
                           source_account.staked_sekx;
         assert!(total_staked > 0, E_NO_STAKING_STATUS);
         
-        // Transfer staked amounts to destination
-        destination_account.staked_usdc = destination_account.staked_usdc + source_account.staked_usdc;
-        destination_account.staked_chfx = destination_account.staked_chfx + source_account.staked_chfx;
-        destination_account.staked_tryb = destination_account.staked_tryb + source_account.staked_tryb;
-        destination_account.staked_sekx = destination_account.staked_sekx + source_account.staked_sekx;
-        
-        // Transfer last_yield_epoch (use the later epoch to ensure yield eligibility)
-        if (source_account.last_yield_epoch > destination_account.last_yield_epoch) {
-            destination_account.last_yield_epoch = source_account.last_yield_epoch;
-        };
+        // Save staking status before resetting
+        let staked_usdc = source_account.staked_usdc;
+        let staked_chfx = source_account.staked_chfx;
+        let staked_tryb = source_account.staked_tryb;
+        let staked_sekx = source_account.staked_sekx;
+        let last_yield_epoch = source_account.last_yield_epoch;
         
         // Reset source account staking status
         source_account.staked_usdc = 0;
         source_account.staked_chfx = 0;
         source_account.staked_tryb = 0;
         source_account.staked_sekx = 0;
-        // Note: We don't reset last_yield_epoch on source, as it's informational
+        
+        // Create destination account with migrated staking status
+        let destination_account = Account {
+            id: object::new(ctx),
+            usdc_owed: 0,
+            staked_usdc: staked_usdc,
+            staked_chfx: staked_chfx,
+            staked_tryb: staked_tryb,
+            staked_sekx: staked_sekx,
+            last_yield_epoch: last_yield_epoch
+        };
+        
+        // Transfer new account to destination address
+        transfer::public_transfer(destination_account, destination_address);
+        
+        // Note: usdc_owed is not migrated (it's a separate debt mechanism)
+    }
+
+    /// Transfer staking status and optionally SBX tokens to another address
+    /// Creates a new account for the destination with the staking status
+    /// Does NOT transfer the source account object - it remains with the sender
+    /// 
+    /// Parameters:
+    /// - source_account: The account to migrate status from (remains with sender)
+    /// - destination_address: Address to receive the new account with staking status
+    /// - transfer_sbx: If true, also transfer SBX tokens to destination
+    /// - sbx_coin: SBX coin to transfer (must be provided, but only transferred if transfer_sbx is true)
+    public entry fun transfer_account_and_staking(
+        source_account: &mut Account,
+        destination_address: address,
+        transfer_sbx: bool,
+        sbx_coin: Coin<SBX>,
+        ctx: &mut TxContext
+    ) {
+        // Check that source has staking status to transfer
+        let total_staked = source_account.staked_usdc + 
+                          source_account.staked_chfx + 
+                          source_account.staked_tryb + 
+                          source_account.staked_sekx;
+        assert!(total_staked > 0, E_NO_STAKING_STATUS);
+        
+        // Save staking status before resetting
+        let staked_usdc = source_account.staked_usdc;
+        let staked_chfx = source_account.staked_chfx;
+        let staked_tryb = source_account.staked_tryb;
+        let staked_sekx = source_account.staked_sekx;
+        let last_yield_epoch = source_account.last_yield_epoch;
+        
+        // Reset source account staking status
+        source_account.staked_usdc = 0;
+        source_account.staked_chfx = 0;
+        source_account.staked_tryb = 0;
+        source_account.staked_sekx = 0;
+        
+        // Create destination account with migrated staking status
+        let destination_account = Account {
+            id: object::new(ctx),
+            usdc_owed: 0,
+            staked_usdc: staked_usdc,
+            staked_chfx: staked_chfx,
+            staked_tryb: staked_tryb,
+            staked_sekx: staked_sekx,
+            last_yield_epoch: last_yield_epoch
+        };
+        
+        // Transfer new account to destination address
+        transfer::public_transfer(destination_account, destination_address);
+        
+        // Transfer SBX tokens if requested
+        if (transfer_sbx) {
+            let sbx_amount = coin::value(&sbx_coin);
+            assert!(sbx_amount > 0, E_ZERO_AMOUNT);
+            transfer::public_transfer(sbx_coin, destination_address);
+        } else {
+            // Return the coin to sender if not transferring
+            transfer::public_transfer(sbx_coin, tx_context::sender(ctx));
+        };
         
         // Note: usdc_owed is not migrated (it's a separate debt mechanism)
     }

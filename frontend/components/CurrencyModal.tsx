@@ -18,7 +18,7 @@ const currencies: Currency[] = ["USDC", "CHFX", "TRYB", "SEKX", "JPYC", "MYRC", 
 
 // Package addresses for Move/IOTA tokens (equivalent to contract addresses)
 // Updated Dec 2024 with new package deployment
-const NEW_PACKAGE_ID = "0x05c4be9ea7e0ab044c923099fa41f94f524fd29339f0b2447373574377b2a20e";
+const NEW_PACKAGE_ID = "0x40c40b62443cae9aad38015ae6f249fd748bd3159fb70f343c6b324bfaeed439";
 const currencyInfo: Record<Currency, { packageAddress: string; coinType: string }> = {
   USDC: {
     packageAddress: NEW_PACKAGE_ID,
