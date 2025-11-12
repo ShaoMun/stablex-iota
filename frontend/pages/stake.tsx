@@ -39,10 +39,10 @@ export default function StakePage() {
   const snackbarTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Contract addresses - Updated after redeployment with shared objects
-  const POOL_PACKAGE_ID = '0xe3a167fa29d171fc79d0b76534fcd8fa86e719177e732373fb9e004076e16a0f';
+  const POOL_PACKAGE_ID = '0x05c4be9ea7e0ab044c923099fa41f94f524fd29339f0b2447373574377b2a20e';
   // Pool and Registry created as shared objects - Updated Dec 2024 with coin transfer logic
-  const POOL_OBJECT_ID = process.env.NEXT_PUBLIC_POOL_OBJECT_ID || "0xb107e62bfcfe4a1492212d3039e357aa443eba350a91963f2e74214e10c7e703";
-  const REGISTRY_OBJECT_ID = process.env.NEXT_PUBLIC_REGISTRY_OBJECT_ID || "0x4cdef4b7bb87bd7abbae95dc8eb034fc88ab0ea78f252d333f2dcecb22e623be";
+  const POOL_OBJECT_ID = process.env.NEXT_PUBLIC_POOL_OBJECT_ID || "0xb727a10b1d354bd1f4b7f19152aee6fbf33bafcf9e741560a34bdaa0365fd189";
+  const REGISTRY_OBJECT_ID = process.env.NEXT_PUBLIC_REGISTRY_OBJECT_ID || "0x911ad622c7b733650e06a609ee8bb808d4a6ff184cd15ce731b5033c036e914d";
 
   const { mutate: signAndExecuteTransaction, mutateAsync: signAndExecuteTransactionAsync } = useSignAndExecuteTransaction({
     onSuccess: (result) => {
@@ -333,13 +333,13 @@ export default function StakePage() {
 
       // Get coin type for the selected currency - Updated with new package ID
       const currencyInfo: Record<Currency, { coinType: string }> = {
-        USDC: { coinType: "0xa5afd11d15dfa90e5ac47ac1a2a74b810b6d0d3c00df8c35c33b90c44e32931d::usdc::USDC" },
-        CHFX: { coinType: "0xe3a167fa29d171fc79d0b76534fcd8fa86e719177e732373fb9e004076e16a0f::chfx::CHFX" },
-        TRYB: { coinType: "0xe3a167fa29d171fc79d0b76534fcd8fa86e719177e732373fb9e004076e16a0f::tryb::TRYB" },
-        SEKX: { coinType: "0xe3a167fa29d171fc79d0b76534fcd8fa86e719177e732373fb9e004076e16a0f::sekx::SEKX" },
-        JPYC: { coinType: "0xa5afd11d15dfa90e5ac47ac1a2a74b810b6d0d3c00df8c35c33b90c44e32931d::jpyc::JPYC" },
-        MYRC: { coinType: "0xa5afd11d15dfa90e5ac47ac1a2a74b810b6d0d3c00df8c35c33b90c44e32931d::myrc::MYRC" },
-        XSGD: { coinType: "0xa5afd11d15dfa90e5ac47ac1a2a74b810b6d0d3c00df8c35c33b90c44e32931d::xsgd::XSGD" },
+        USDC: { coinType: `${POOL_PACKAGE_ID}::usdc::USDC` },
+        CHFX: { coinType: `${POOL_PACKAGE_ID}::chfx::CHFX` },
+        TRYB: { coinType: `${POOL_PACKAGE_ID}::tryb::TRYB` },
+        SEKX: { coinType: `${POOL_PACKAGE_ID}::sekx::SEKX` },
+        JPYC: { coinType: `${POOL_PACKAGE_ID}::jpyc::JPYC` },
+        MYRC: { coinType: `${POOL_PACKAGE_ID}::myrc::MYRC` },
+        XSGD: { coinType: `${POOL_PACKAGE_ID}::xsgd::XSGD` },
       };
 
       // Fetch user's coin objects for the selected currency
@@ -587,7 +587,7 @@ export default function StakePage() {
       }
 
       // Build transaction based on currency
-      const txb = new Transaction();
+      const txb = new Transaction(client);
 
       // Set sender
       txb.setSender(currentAccount.address);
@@ -714,32 +714,10 @@ export default function StakePage() {
       const poolSharedVersion = isPoolShared ? (poolOwner as any)?.Shared?.initial_shared_version : null;
       const registrySharedVersion = isRegistryShared ? (registryOwner as any)?.Shared?.initial_shared_version : null;
 
-      // Get object references (shared or owned) - store them before using
-      let poolRef: any;
-      let registryRef: any;
-      
-      if (isPoolShared && poolSharedVersion) {
-        poolRef = txb.sharedObjectRef({
-          objectId: POOL_OBJECT_ID,
-          mutable: true,
-          initialSharedVersion: poolSharedVersion,
-        });
-      } else {
-        poolRef = txb.object(POOL_OBJECT_ID);
-      }
-
-      if (isRegistryShared && registrySharedVersion) {
-        registryRef = txb.sharedObjectRef({
-          objectId: REGISTRY_OBJECT_ID,
-          mutable: false, // Registry is immutable (&Registry, not &mut Registry)
-          initialSharedVersion: registrySharedVersion,
-        });
-      } else {
-        registryRef = txb.object(REGISTRY_OBJECT_ID);
-      }
-      
-      // Get account object reference - use simple object() method
-      // The SDK will automatically resolve the object type and mutability based on the function signature
+      // Get object references - use txb.object() for all objects (shared or owned)
+      // The SDK will automatically handle shared objects correctly based on the function signature
+      const poolRef = txb.object(POOL_OBJECT_ID);
+      const registryRef = txb.object(REGISTRY_OBJECT_ID);
       const accountRef = txb.object(accountObjectId);
       
       // Deposit fee: 0.1% = 10 basis points
@@ -785,6 +763,8 @@ export default function StakePage() {
           coinRef = firstCoin;
         } else {
           // Split the exact amount needed
+          // splitCoins is the first actual command (object() and sharedObjectRef() are just references, not commands)
+          // So splitCoins will be at index 0
           txb.splitCoins(firstCoin, [amountMicro]);
           coinRef = { $kind: 'NestedResult' as const, NestedResult: [0, 0] };
         }
@@ -810,6 +790,8 @@ export default function StakePage() {
         if (coinObjects.length === 1 && amountsToSplit[0] === BigInt(coins.data.find(c => c.coinObjectId === coinObjects[0])?.balance || 0)) {
           coinRef = firstCoin;
         } else {
+          // splitCoins is the first actual command (object() and sharedObjectRef() are just references, not commands)
+          // So splitCoins will be at index 0
           txb.splitCoins(firstCoin, [amountMicro]);
           coinRef = { $kind: 'NestedResult' as const, NestedResult: [0, 0] };
         }
@@ -835,6 +817,8 @@ export default function StakePage() {
         if (coinObjects.length === 1 && amountsToSplit[0] === BigInt(coins.data.find(c => c.coinObjectId === coinObjects[0])?.balance || 0)) {
           coinRef = firstCoin;
         } else {
+          // splitCoins is the first actual command (object() and sharedObjectRef() are just references, not commands)
+          // So splitCoins will be at index 0
           txb.splitCoins(firstCoin, [amountMicro]);
           coinRef = { $kind: 'NestedResult' as const, NestedResult: [0, 0] };
         }
@@ -1206,6 +1190,7 @@ export default function StakePage() {
         onClose={() => setIsCurrencyModalOpen(false)}
         selectedCurrency={selectedCurrency}
         onSelect={handleCurrencySelect}
+        refreshTrigger={snackbar.digest} // Refresh balances when transaction completes
       />
 
           {/* Wallet Connection Modal */}

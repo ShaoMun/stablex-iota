@@ -105,13 +105,19 @@ Users deposit USDC or regional stablecoins to earn unified yield, receive SBX to
 
 ## Package Information
 
-### Latest Package (Coin Transfer Logic - Production Ready)
-- **Package ID:** `0x82dbc84bde7f084cd91ff6d66a8c80fb7a569ba7d4fbe4b6dba5fa6a2223518d`
-- **Published:** Latest version with coin transfer logic (swaps transfer from pool reserves, not minting)
-- **Transaction Digest:** `FhHomi5X5KLRLam3psL8PZCJZBD3DVMwGAuTkKfLX2TK`
+### Latest Package (Unstake Coin Transfer - Production Ready)
+- **Package ID:** `0x05c4be9ea7e0ab044c923099fa41f94f524fd29339f0b2447373574377b2a20e`
+- **Published:** Latest version with unstake coin transfer logic (unstake functions properly transfer coins to users)
 - **Network:** IOTA Testnet
-- **Pool Object ID:** `0x01cb94ca84954452ea7fd088ee386f044d1d474742cc5c3cde6325e51c29b276` (Shared)
-- **Registry Object ID:** `0x78eb44c732de48c5bf800312213b2ecbaf0e43f4f463aad245648fc6a20308cf` (Shared)
+- **Pool Object ID:** `0xb727a10b1d354bd1f4b7f19152aee6fbf33bafcf9e741560a34bdaa0365fd189` (Shared)
+- **Registry Object ID:** `0x911ad622c7b733650e06a609ee8bb808d4a6ff184cd15ce731b5033c036e914d` (Shared)
+- **Key Updates:**
+  - ✅ **Unstake Coin Transfers**: Unstake functions now properly transfer coins from pool reserves to users
+  - ✅ **USDC Reserve Balance**: Pool struct includes `usdc_reserve_balance: Balance<USDC>` for unstaking USDC
+  - ✅ **Currency Whitelisting**: Regional currencies (CHFX, TRYB, SEKX) must be whitelisted via `admin_set_whitelist` before staking
+  - ✅ **Price Setting**: Prices must be set in registry via `admin_set_prices_microusd` before staking
+  - ✅ **Frontend Updates**: All frontend components updated with new package and object IDs
+  - ✅ **Currency Modal**: Updated to fetch balances from new package
 - **Previous Package ID:** `0xe917e90a0763a67851076f55ac8eda48a533b3ff6c1bb1d0774d10c6d8c40ca2` (Fee tolerance fix)
 - **Modules:** `chfx`, `tryb`, `sekx`, `sbx`, `sbx_pool`, `usdc`, `flash_vault`, `jpyc`, `myrc`, `xsgd`
 - **Key Features:**
@@ -156,6 +162,7 @@ The frontend is a Next.js application with full wallet integration:
 - ✅ **Transaction Status**: Snackbar notifications with explorer links for successful transactions
 
 ### Previous Packages
+- **Package ID:** `0x82dbc84bde7f084cd91ff6d66a8c80fb7a569ba7d4fbe4b6dba5fa6a2223518d` (Coin Transfer Logic - swaps transfer from pool reserves)
 - **Package ID:** `0x71157d06f6ea5ac0d5f952881126591da1c0d5e3980e9ab9dbf1d08dff989846` (Unified Basket with Migration - had owned objects issue)
 - **Package ID:** `0x7d6fa54ec2a4ae5620967a2129860f5a8a0b4d9849df64f2ae9b5325f3ca7db0` (EUR-focused with 40/60 split)
 - **Package ID:** `0xce5a8930723f277deb6d1b2d583e732b885458cb6452354c502cb70da8f7cff9` (with test_feed_from_state)
@@ -170,30 +177,30 @@ The frontend is a Next.js application with full wallet integration:
 All tokens are regulated currencies with 6 decimals:
 
 1. **CHFX (Swiss Franc)**
-   - TreasuryCap ID: `0x1a9aee47ef68ebc2c1f9577c6e82e83e473ebc264a8711a932429af4841bad5d`
-   - Package: `0x82dbc84bde7f084cd91ff6d66a8c80fb7a569ba7d4fbe4b6dba5fa6a2223518d`
-   - Coin Type: `0x82dbc84bde7f084cd91ff6d66a8c80fb7a569ba7d4fbe4b6dba5fa6a2223518d::chfx::CHFX`
-   - Initial Mint: 1000 tokens (1000000000 with 6 decimals)
+   - Package: `0x05c4be9ea7e0ab044c923099fa41f94f524fd29339f0b2447373574377b2a20e`
+   - Coin Type: `0x05c4be9ea7e0ab044c923099fa41f94f524fd29339f0b2447373574377b2a20e::chfx::CHFX`
+   - Initial Mint: 10,000 tokens (10,000,000,000 with 6 decimals)
    - Owner: `0xd4655ee4e9f16da4be0342c9e8e3729478be385c26caf43ec5e5a049198cb1a2`
 
 2. **TRYB (Turkish Lira)**
-   - TreasuryCap ID: `0x60dd01a586c0c0246270b973114d751beb082d6fd9531dac041eb13d30dd3096`
-   - Package: `0x82dbc84bde7f084cd91ff6d66a8c80fb7a569ba7d4fbe4b6dba5fa6a2223518d`
-   - Coin Type: `0x82dbc84bde7f084cd91ff6d66a8c80fb7a569ba7d4fbe4b6dba5fa6a2223518d::tryb::TRYB`
-   - Initial Mint: 1000 tokens (1000000000 with 6 decimals)
+   - Package: `0x05c4be9ea7e0ab044c923099fa41f94f524fd29339f0b2447373574377b2a20e`
+   - Coin Type: `0x05c4be9ea7e0ab044c923099fa41f94f524fd29339f0b2447373574377b2a20e::tryb::TRYB`
+   - Initial Mint: 10,000 tokens (10,000,000,000 with 6 decimals)
    - Owner: `0xd4655ee4e9f16da4be0342c9e8e3729478be385c26caf43ec5e5a049198cb1a2`
 
 3. **SEKX (Swedish Krona)**
-   - TreasuryCap ID: `0x95539e85ebff64b98e21ef556dabc774666bbdda7b034197f968b7f9800bc55f`
-   - Package: `0x82dbc84bde7f084cd91ff6d66a8c80fb7a569ba7d4fbe4b6dba5fa6a2223518d`
-   - Coin Type: `0x82dbc84bde7f084cd91ff6d66a8c80fb7a569ba7d4fbe4b6dba5fa6a2223518d::sekx::SEKX`
-   - Initial Mint: 1000 tokens (1000000000 with 6 decimals)
+   - Package: `0x05c4be9ea7e0ab044c923099fa41f94f524fd29339f0b2447373574377b2a20e`
+   - Coin Type: `0x05c4be9ea7e0ab044c923099fa41f94f524fd29339f0b2447373574377b2a20e::sekx::SEKX`
+   - Initial Mint: 10,000 tokens (10,000,000,000 with 6 decimals)
    - Owner: `0xd4655ee4e9f16da4be0342c9e8e3729478be385c26caf43ec5e5a049198cb1a2`
 
 4. **USDC (USD Coin)**
-   - TreasuryCap ID: Available in package
-   - Initial Mint: 1000 tokens (1000000000 with 6 decimals)
+   - Package: `0x05c4be9ea7e0ab044c923099fa41f94f524fd29339f0b2447373574377b2a20e`
+   - Coin Type: `0x05c4be9ea7e0ab044c923099fa41f94f524fd29339f0b2447373574377b2a20e::usdc::USDC`
+   - Initial Mint: 10,000 tokens (10,000,000,000 with 6 decimals)
    - Owner: `0xd4655ee4e9f16da4be0342c9e8e3729478be385c26caf43ec5e5a049198cb1a2`
+
+**Note:** SBX tokens are minted during staking and burned during unstaking. No initial mint required.
 
 ## Price Feed Architecture
 
@@ -223,11 +230,16 @@ All functions that require prices now accept them as direct parameters:
 
 ## Key Transactions
 
-### Latest Package Publication (Coin Transfer Logic - Production Ready)
-- **Transaction Digest:** `FhHomi5X5KLRLam3psL8PZCJZBD3DVMwGAuTkKfLX2TK`
-- **Package ID:** `0x82dbc84bde7f084cd91ff6d66a8c80fb7a569ba7d4fbe4b6dba5fa6a2223518d`
+### Latest Package Publication (Unstake Coin Transfer - Production Ready)
+- **Package ID:** `0x05c4be9ea7e0ab044c923099fa41f94f524fd29339f0b2447373574377b2a20e`
 - **Modules:** chfx, tryb, sekx, sbx, sbx_pool, usdc, flash_vault, jpyc, myrc, xsgd
-- **Published:** Latest version with coin transfer logic (swaps transfer from pool reserves, not minting), shared objects for multi-user access, unified basket architecture, and full frontend integration with staking and swapping
+- **Published:** Latest version with unstake coin transfer logic, shared objects for multi-user access, unified basket architecture, and full frontend integration with staking, unstaking, and swapping
+- **Key Features:**
+  - ✅ Unstake functions properly transfer coins from pool reserves to users
+  - ✅ Pool includes `usdc_reserve_balance: Balance<USDC>` for unstaking USDC
+  - ✅ Currency whitelisting required before staking regional currencies
+  - ✅ Price setting required in registry before staking
+  - ✅ Frontend fully updated with new package and object IDs
 
 ### Previous Package Publication (SBX Token + Migration Support)
 - **Transaction Digest:** `4NsomjHZC6S54ZFjSbQDUt1RJHhSjbHbFtEPS1wtRziC`
@@ -457,11 +469,22 @@ public entry fun admin_set_targets(
 )
 
 // Set prices (cached for coverage calculations)
+// Required before staking regional currencies
 public entry fun admin_set_prices_microusd(
     registry: &mut Registry,
     chfx: u64,
     tryb: u64,
     sekx: u64,
+    ctx: &TxContext
+)
+
+// Whitelist currencies (required before staking)
+// Regional currencies must be whitelisted before users can stake them
+public entry fun admin_set_whitelist(
+    registry: &mut Registry,
+    chfx: bool,
+    tryb: bool,
+    sekx: bool,
     ctx: &TxContext
 )
 
@@ -620,17 +643,25 @@ public fun coverage_bps(
 
 **Production-Ready Features:**
 - ✅ `create_registry` - Registry created as shared object
-- ✅ `create_pool` - Pool created as shared object
+- ✅ `create_pool` - Pool created as shared object with `usdc_reserve_balance` for unstaking
 - ✅ `create_account` - Automatic account creation for users
 - ✅ `stake_usdc`, `stake_chfx`, `stake_tryb`, `stake_sekx` - All staking functions working
+- ✅ `unstake_usdc`, `unstake_chfx`, `unstake_tryb`, `unstake_sekx` - All unstake functions working with coin transfers
 - ✅ `swap_regional` - Direct A→B swaps between regional stablecoins working
-- ✅ Coin transfers - Coins properly split and transferred to pool
-- ✅ SBX minting - SBX tokens minted 1:1 with USD value
-- ✅ Real-time fee calculation - Network fees, deposit fees, and swap fees with depth-aware pricing
+- ✅ Coin transfers - Coins properly split, transferred to pool during staking, and transferred to users during unstaking
+- ✅ SBX minting/burning - SBX tokens minted 1:1 with USD value on stake, burned on unstake
+- ✅ Real-time fee calculation - Network fees, deposit fees, swap fees, and unstake fees with depth-aware pricing
 - ✅ Price feeds - API-based price queries with exact synchronization between frontend and contract
+- ✅ Currency whitelisting - Regional currencies must be whitelisted before staking
+- ✅ Price setting - Prices must be set in registry before staking
 - ✅ Transaction explorer integration - Success snackbar notifications with explorer links
+- ✅ Balance refresh - CurrencyModal automatically refreshes balances after transactions
 
-**Status:** ✅ Production-ready on IOTA Testnet - Stake and Swap fully operational
+**Status:** ✅ Production-ready on IOTA Testnet - Stake, Unstake, and Swap fully operational
+
+**Setup Requirements:**
+1. Whitelist currencies: `admin_set_whitelist(registry, true, true, true)` - Enable CHFX, TRYB, SEKX
+2. Set prices: `admin_set_prices_microusd(registry, chfx_price, tryb_price, sekx_price)` - Set current prices in micro-USD
 
 ## Dependencies
 
@@ -659,6 +690,7 @@ first_package = "0x0"
 
 ### Core Features (✅ Working)
 - ✅ **Staking**: Multi-currency staking (USDC, CHFX, TRYB, SEKX, JPYC, MYRC, XSGD)
+- ✅ **Unstaking**: Unstake SBX tokens to receive any supported currency with proper coin transfers
 - ✅ **Swapping**: Direct A→B swaps between regional stablecoins with real-time rate calculation
 - ✅ **Unified Basket Architecture**: All currencies (USDC + regionals) in one pool
 - ✅ **Shared Objects**: Pool and Registry created as shared objects for multi-user access
@@ -666,10 +698,12 @@ first_package = "0x0"
 - ✅ **Unified APY**: All depositors earn the same APY (higher than USDC alone)
 - ✅ **Flash Loan Vault**: Real flash loan functionality deployed on IOTA Testnet
 - ✅ **Frontend dApp**: Complete Next.js application with full wallet integration
-- ✅ **Coin Management**: Proper coin splitting and transfer for exact amounts
+- ✅ **Coin Management**: Proper coin splitting and transfer for exact amounts (staking and unstaking)
 - ✅ **Price Synchronization**: Exact price matching between API calculations and on-chain transactions
 - ✅ **BigInt Precision**: All calculations use BigInt to match Move contract integer arithmetic
 - ✅ **Transaction Status**: Snackbar notifications with explorer links
+- ✅ **Balance Refresh**: Automatic balance updates in CurrencyModal after transactions
+- ✅ **Staked Amount Display**: StakedCurrencyModal shows staked amounts from user's Account object
 
 ### Technical Implementation (✅ Complete)
 - ✅ Token creation (CHFX, TRYB, SEKX, USDC, JPYC, MYRC, XSGD)
@@ -773,10 +807,10 @@ await contract.deposit_usdc({
 
 - **Network:** IOTA Testnet
 - **Explorer:** https://explorer.iota.org/ (use `?network=testnet` parameter)
-- **Latest Package ID:** `0x82dbc84bde7f084cd91ff6d66a8c80fb7a569ba7d4fbe4b6dba5fa6a2223518d`
-- **Transaction Digest:** `FhHomi5X5KLRLam3psL8PZCJZBD3DVMwGAuTkKfLX2TK`
-- **Pool Object:** `0x01cb94ca84954452ea7fd088ee386f044d1d474742cc5c3cde6325e51c29b276` (Shared)
-- **Registry Object:** `0x78eb44c732de48c5bf800312213b2ecbaf0e43f4f463aad245648fc6a20308cf` (Shared)
+- **Latest Package ID:** `0x05c4be9ea7e0ab044c923099fa41f94f524fd29339f0b2447373574377b2a20e`
+- **Pool Object:** `0xb727a10b1d354bd1f4b7f19152aee6fbf33bafcf9e741560a34bdaa0365fd189` (Shared)
+- **Registry Object:** `0x911ad622c7b733650e06a609ee8bb808d4a6ff184cd15ce731b5033c036e914d` (Shared)
+- **Admin Address:** `0x32113604f66eaa7cace8b35b65d6ccaf6a7ee65be0345a3d1e33653fd113b274`
 
 ## Quick Start
 

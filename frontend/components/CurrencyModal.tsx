@@ -11,40 +11,42 @@ interface CurrencyModalProps {
   selectedCurrency: Currency | null;
   onSelect: (currency: Currency) => void;
   excludedCurrencies?: Currency[];
+  refreshTrigger?: number | string; // Trigger refresh when this changes (e.g., transaction digest)
 }
 
 const currencies: Currency[] = ["USDC", "CHFX", "TRYB", "SEKX", "JPYC", "MYRC", "XSGD"];
 
 // Package addresses for Move/IOTA tokens (equivalent to contract addresses)
-// Note: These are the actual package addresses from the wallet balances
+// Updated Dec 2024 with new package deployment
+const NEW_PACKAGE_ID = "0x05c4be9ea7e0ab044c923099fa41f94f524fd29339f0b2447373574377b2a20e";
 const currencyInfo: Record<Currency, { packageAddress: string; coinType: string }> = {
   USDC: {
-    packageAddress: "0xe3a167fa29d171fc79d0b76534fcd8fa86e719177e732373fb9e004076e16a0f",
-    coinType: "0xa5afd11d15dfa90e5ac47ac1a2a74b810b6d0d3c00df8c35c33b90c44e32931d::usdc::USDC"
+    packageAddress: NEW_PACKAGE_ID,
+    coinType: `${NEW_PACKAGE_ID}::usdc::USDC`
   },
   CHFX: {
-    packageAddress: "0xe3a167fa29d171fc79d0b76534fcd8fa86e719177e732373fb9e004076e16a0f",
-    coinType: "0xe3a167fa29d171fc79d0b76534fcd8fa86e719177e732373fb9e004076e16a0f::chfx::CHFX"
+    packageAddress: NEW_PACKAGE_ID,
+    coinType: `${NEW_PACKAGE_ID}::chfx::CHFX`
   },
   TRYB: {
-    packageAddress: "0xe3a167fa29d171fc79d0b76534fcd8fa86e719177e732373fb9e004076e16a0f",
-    coinType: "0xe3a167fa29d171fc79d0b76534fcd8fa86e719177e732373fb9e004076e16a0f::tryb::TRYB"
+    packageAddress: NEW_PACKAGE_ID,
+    coinType: `${NEW_PACKAGE_ID}::tryb::TRYB`
   },
   SEKX: {
-    packageAddress: "0xe3a167fa29d171fc79d0b76534fcd8fa86e719177e732373fb9e004076e16a0f",
-    coinType: "0xe3a167fa29d171fc79d0b76534fcd8fa86e719177e732373fb9e004076e16a0f::sekx::SEKX"
+    packageAddress: NEW_PACKAGE_ID,
+    coinType: `${NEW_PACKAGE_ID}::sekx::SEKX`
   },
   JPYC: {
-    packageAddress: "0xe3a167fa29d171fc79d0b76534fcd8fa86e719177e732373fb9e004076e16a0f",
-    coinType: "0xa5afd11d15dfa90e5ac47ac1a2a74b810b6d0d3c00df8c35c33b90c44e32931d::jpyc::JPYC"
+    packageAddress: NEW_PACKAGE_ID,
+    coinType: `${NEW_PACKAGE_ID}::jpyc::JPYC`
   },
   MYRC: {
-    packageAddress: "0xe3a167fa29d171fc79d0b76534fcd8fa86e719177e732373fb9e004076e16a0f",
-    coinType: "0xa5afd11d15dfa90e5ac47ac1a2a74b810b6d0d3c00df8c35c33b90c44e32931d::myrc::MYRC"
+    packageAddress: NEW_PACKAGE_ID,
+    coinType: `${NEW_PACKAGE_ID}::myrc::MYRC`
   },
   XSGD: {
-    packageAddress: "0xe3a167fa29d171fc79d0b76534fcd8fa86e719177e732373fb9e004076e16a0f",
-    coinType: "0xa5afd11d15dfa90e5ac47ac1a2a74b810b6d0d3c00df8c35c33b90c44e32931d::xsgd::XSGD"
+    packageAddress: NEW_PACKAGE_ID,
+    coinType: `${NEW_PACKAGE_ID}::xsgd::XSGD`
   }
 };
 
@@ -58,7 +60,7 @@ const getExplorerUrl = (packageAddress: string) => {
   return `https://explorer.iota.org/object/${packageAddress}?network=testnet`;
 };
 
-export default function CurrencyModal({ isOpen, onClose, selectedCurrency, onSelect, excludedCurrencies = [] }: CurrencyModalProps) {
+export default function CurrencyModal({ isOpen, onClose, selectedCurrency, onSelect, excludedCurrencies = [], refreshTrigger }: CurrencyModalProps) {
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [balances, setBalances] = useState<Record<Currency, string>>({
     USDC: "0",
@@ -258,7 +260,7 @@ export default function CurrencyModal({ isOpen, onClose, selectedCurrency, onSel
     };
 
     fetchBalances();
-  }, [isOpen, currentAccount, client]);
+  }, [isOpen, currentAccount, client, refreshTrigger]);
 
   // Fetch prices for currencies
   useEffect(() => {

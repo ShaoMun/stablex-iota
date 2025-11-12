@@ -32,28 +32,25 @@ export default async function handler(
   }
 
   try {
-    const { fromCurrency, toCurrency, amount } = req.query;
+    const { toCurrency, amount } = req.query;
 
-    if (!fromCurrency || !toCurrency || !amount) {
-      return res.status(400).json({ error: 'Missing required parameters: fromCurrency, toCurrency, amount' });
+    if (!toCurrency || !amount) {
+      return res.status(400).json({ error: 'Missing required parameters: toCurrency, amount' });
     }
 
     // Handle Next.js query params (can be string or string[])
-    // Extract first value if array, otherwise use as string
-    const fromCurrencyRaw = Array.isArray(fromCurrency) ? fromCurrency[0] : fromCurrency;
     const toCurrencyRaw = Array.isArray(toCurrency) ? toCurrency[0] : toCurrency;
     const amountRaw = Array.isArray(amount) ? amount[0] : amount;
     
     // Trim and validate currency strings
-    const fromCurrencyStr = fromCurrencyRaw ? String(fromCurrencyRaw).trim().toUpperCase() : '';
     const toCurrencyStr = toCurrencyRaw ? String(toCurrencyRaw).trim().toUpperCase() : '';
     const amountStr = amountRaw ? String(amountRaw).trim() : '';
     
     // Validate currencies are provided
-    if (!fromCurrencyStr || !toCurrencyStr || !amountStr) {
+    if (!toCurrencyStr || !amountStr) {
       return res.status(400).json({ 
         error: 'Missing required parameters',
-        details: { fromCurrency: fromCurrencyStr, toCurrency: toCurrencyStr, amount: amountStr }
+        details: { toCurrency: toCurrencyStr, amount: amountStr }
       });
     }
     
@@ -69,36 +66,20 @@ export default async function handler(
     }
 
     // Debug logging
-    console.log('Swap rate API called:', {
-      raw: { fromCurrency, toCurrency, amount },
-      processed: { fromCurrencyStr, toCurrencyStr, amountStr },
+    console.log('Unstake rate API called:', {
+      raw: { toCurrency, amount },
+      processed: { toCurrencyStr, amountStr },
       currencyCodes: Object.keys(currencyCodes),
-      fromCurrencyInCodes: currencyCodes[fromCurrencyStr],
       toCurrencyInCodes: currencyCodes[toCurrencyStr],
     });
 
-    // Validate currencies (swap only supports CHFX, TRYB, SEKX - no USDC)
-    if (fromCurrencyStr === 'USDC' || toCurrencyStr === 'USDC') {
-      return res.status(400).json({ error: 'USDC swaps are not supported. Please use CHFX, TRYB, or SEKX.' });
-    }
-
-    // Check if currency exists in currencyCodes (use 'in' operator, not truthiness check)
-    // because currencyCodes values are 0, 1, 2 which are falsy in JavaScript!
-    if (!(fromCurrencyStr in currencyCodes) || !(toCurrencyStr in currencyCodes)) {
-      console.error('Currency validation failed:', {
-        fromCurrencyStr,
-        toCurrencyStr,
-        fromCurrencyExists: fromCurrencyStr in currencyCodes,
-        toCurrencyExists: toCurrencyStr in currencyCodes,
-        currencyCodesKeys: Object.keys(currencyCodes),
-      });
+    // Validate currency (unstake supports USDC, CHFX, TRYB, SEKX)
+    if (!(toCurrencyStr === 'USDC' || toCurrencyStr in currencyCodes)) {
       return res.status(400).json({ 
-        error: 'Invalid currency. Supported: CHFX, TRYB, SEKX',
+        error: 'Invalid currency. Supported: USDC, CHFX, TRYB, SEKX',
         details: { 
-          received: { from: fromCurrencyStr, to: toCurrencyStr },
-          validCurrencies: Object.keys(currencyCodes),
-          fromCurrencyExists: fromCurrencyStr in currencyCodes,
-          toCurrencyExists: toCurrencyStr in currencyCodes,
+          received: { to: toCurrencyStr },
+          validCurrencies: ['USDC', ...Object.keys(currencyCodes)],
         }
       });
     }
@@ -167,31 +148,24 @@ export default async function handler(
       return 0;
     };
 
-    const [fromPriceMu, toPriceMu, chfxPriceMu, trybPriceMu, sekxPriceMu] = await Promise.all([
-      fetchPrice(fromCurrencyStr),
+    // SBX price is always 1 USD (1 SBX = 1 USD)
+    const sbxPriceMu = 1_000_000; // 1 USD in micro-USD
+    const [toPriceMu, chfxPriceMu, trybPriceMu, sekxPriceMu] = await Promise.all([
       fetchPrice(toCurrencyStr),
       fetchPrice('CHFX'),
       fetchPrice('TRYB'),
       fetchPrice('SEKX'),
     ]);
 
-    if (fromPriceMu === 0 || toPriceMu === 0) {
-      const missingPrices = [];
-      if (fromPriceMu === 0) missingPrices.push(fromCurrencyStr);
-      if (toPriceMu === 0) missingPrices.push(toCurrencyStr);
-      
-      console.error('Failed to fetch prices:', {
-        fromCurrency: fromCurrencyStr,
+    if (toPriceMu === 0) {
+      console.error('Failed to fetch price for toCurrency:', {
         toCurrency: toCurrencyStr,
-        fromPriceMu,
         toPriceMu,
-        missingPrices,
       });
       
       return res.status(400).json({ 
-        error: 'Failed to fetch currency prices',
-        details: `Could not fetch prices for: ${missingPrices.join(', ')}`,
-        fromPriceMu,
+        error: 'Failed to fetch currency price',
+        details: `Could not fetch price for: ${toCurrencyStr}`,
         toPriceMu,
       });
     }
@@ -228,9 +202,7 @@ export default async function handler(
     const targetTrybBps = Number(registryContent.target_tryb_bps || 0);
     const targetSekxBps = Number(registryContent.target_sekx_bps || 0);
     
-    // Use registry cached prices for POST-swap calculation (must match Move contract EXACTLY)
-    // The Move contract uses registry.chfx_price_microusd directly, even if 0
-    // We MUST use the same prices to match the on-chain calculation
+    // Use registry cached prices for POST-unstake calculation (must match Move contract EXACTLY)
     const registryChfxPriceMu = Number(registryContent.chfx_price_microusd || 0);
     const registryTrybPriceMu = Number(registryContent.tryb_price_microusd || 0);
     const registrySekxPriceMu = Number(registryContent.sekx_price_microusd || 0);
@@ -248,13 +220,13 @@ export default async function handler(
         : 'Registry prices are set correctly'
     });
 
-    // Calculate vault USD values (micro-USD)
+    // Calculate vault USD values (micro-USD) - PRE-unstake
     const chfxMu = (chfxLiability * BigInt(chfxPriceMu)) / BigInt(1_000_000);
     const trybMu = (trybLiability * BigInt(trybPriceMu)) / BigInt(1_000_000);
     const sekxMu = (sekxLiability * BigInt(sekxPriceMu)) / BigInt(1_000_000);
     const totalMu = usdcReserve + chfxMu + trybMu + sekxMu;
 
-    // Calculate coverage in basis points for each currency
+    // Calculate coverage in basis points for each currency - PRE-unstake
     const chfxBps = totalMu > 0 ? Number((chfxMu * BigInt(10_000)) / totalMu) : 0;
     const trybBps = totalMu > 0 ? Number((trybMu * BigInt(10_000)) / totalMu) : 0;
     const sekxBps = totalMu > 0 ? Number((sekxMu * BigInt(10_000)) / totalMu) : 0;
@@ -263,9 +235,13 @@ export default async function handler(
     let toTargetBps: number;
     let toCovBpsPre: number;
     let toLiabilityPre: bigint;
-    // toPriceMu is already fetched above, use it directly
 
-    if (toCurrencyStr === 'CHFX') {
+    if (toCurrencyStr === 'USDC') {
+      // USDC doesn't have a target or liability, it's the reserve
+      toTargetBps = 0;
+      toCovBpsPre = totalMu > 0 ? Number((usdcReserve * BigInt(10_000)) / totalMu) : 0;
+      toLiabilityPre = usdcReserve;
+    } else if (toCurrencyStr === 'CHFX') {
       toTargetBps = targetChfxBps;
       toCovBpsPre = chfxBps;
       toLiabilityPre = chfxLiability;
@@ -280,13 +256,13 @@ export default async function handler(
     }
 
     // Compute direct swap rate (from compute_direct_swap_rate in Move)
-    // Base rate: price_from / price_to (CORRECT formula)
-    // Rate = how many units of TO currency per 1 unit of FROM currency
-    // Example: If price_from = 1,000,000 (1 USD) and price_to = 19,000 (0.019 USD), then rate = 1,000,000 / 19,000 = 52.6
+    // Base rate: price_sbx / price_to (SBX is always 1 USD)
+    // Rate = how many units of TO currency per 1 unit of SBX
+    // Example: If price_to = 19,000 (0.019 USD), then rate = 1,000,000 / 19,000 = 52.6
     // Keep everything in BigInt to match contract's u128 math exactly
-    const baseRate = (BigInt(fromPriceMu) * BigInt(1_000_000)) / BigInt(toPriceMu);
+    const baseRate = (BigInt(sbxPriceMu) * BigInt(1_000_000)) / BigInt(toPriceMu);
 
-    // Apply depth penalty if target asset is scarce (using PRE-swap coverage for rate calculation)
+    // Apply depth penalty if target asset is scarce (using PRE-unstake coverage for rate calculation)
     // Match contract: depth_penalty_bps = ((to_target_bps - to_depth_bps) * 100u64) / to_target_bps
     const depthPenaltyBps = toTargetBps > 0 && toCovBpsPre < toTargetBps
       ? Number((BigInt(toTargetBps - toCovBpsPre) * BigInt(100)) / BigInt(toTargetBps))
@@ -300,27 +276,19 @@ export default async function handler(
     // Match contract: amount_out_before_fee = ((amount_in as u128) * rate) / 1_000_000u128
     const amountInUnits = BigInt(Math.floor(amountNum * 1_000_000)); // Convert to token units (6 decimals)
     const amountOutBeforeFeeUnits = (amountInUnits * adjustedRate) / BigInt(1_000_000);
-    // Keep as BigInt to match contract's integer math exactly
     const amountOutBeforeFee = amountOutBeforeFeeUnits;
 
-    // Calculate POST-swap liabilities for fee calculation
-    // After swap: "from" currency liability increases, "to" currency liability decreases
+    // Calculate POST-unstake liabilities for fee calculation
+    // After unstake: SBX is burned, "to" currency liability decreases (or USDC reserve decreases)
     let chfxLiabilityPost = chfxLiability;
     let trybLiabilityPost = trybLiability;
     let sekxLiabilityPost = sekxLiability;
-    
-    // Increase "from" currency liability
-    if (fromCurrencyStr === 'CHFX') {
-      chfxLiabilityPost = chfxLiability + amountInUnits;
-    } else if (fromCurrencyStr === 'TRYB') {
-      trybLiabilityPost = trybLiability + amountInUnits;
-    } else if (fromCurrencyStr === 'SEKX') {
-      sekxLiabilityPost = sekxLiability + amountInUnits;
-    }
+    let usdcReservePost = usdcReserve;
     
     // Decrease "to" currency liability (using amountOutBeforeFeeUnits for calculation)
-    // Note: Contract uses amount_out_before_fee for liability calculation, then payout_units for actual transfer
-    if (toCurrencyStr === 'CHFX') {
+    if (toCurrencyStr === 'USDC') {
+      usdcReservePost = usdcReserve - amountOutBeforeFeeUnits;
+    } else if (toCurrencyStr === 'CHFX') {
       chfxLiabilityPost = chfxLiabilityPost - amountOutBeforeFeeUnits;
     } else if (toCurrencyStr === 'TRYB') {
       trybLiabilityPost = trybLiabilityPost - amountOutBeforeFeeUnits;
@@ -328,17 +296,18 @@ export default async function handler(
       sekxLiabilityPost = sekxLiabilityPost - amountOutBeforeFeeUnits;
     }
 
-    // Recalculate vault USD values with POST-swap liabilities
+    // Recalculate vault USD values with POST-unstake liabilities
     // MUST use registry cached prices to match Move contract calculation exactly
-    // Move contract uses: registry.chfx_price_microusd, registry.tryb_price_microusd, registry.sekx_price_microusd
     const chfxMuPost = (chfxLiabilityPost * BigInt(registryChfxPriceMu)) / BigInt(1_000_000);
     const trybMuPost = (trybLiabilityPost * BigInt(registryTrybPriceMu)) / BigInt(1_000_000);
     const sekxMuPost = (sekxLiabilityPost * BigInt(registrySekxPriceMu)) / BigInt(1_000_000);
-    const totalMuPost = usdcReserve + chfxMuPost + trybMuPost + sekxMuPost;
+    const totalMuPost = usdcReservePost + chfxMuPost + trybMuPost + sekxMuPost;
     
-    // Calculate POST-swap coverage for "to" currency
+    // Calculate POST-unstake coverage for "to" currency
     let toLiabilityPost: bigint;
-    if (toCurrencyStr === 'CHFX') {
+    if (toCurrencyStr === 'USDC') {
+      toLiabilityPost = usdcReservePost;
+    } else if (toCurrencyStr === 'CHFX') {
       toLiabilityPost = chfxLiabilityPost;
     } else if (toCurrencyStr === 'TRYB') {
       toLiabilityPost = trybLiabilityPost;
@@ -348,7 +317,9 @@ export default async function handler(
     
     // Get registry cached price for "to" currency (must match Move contract)
     let registryToPriceMu: number;
-    if (toCurrencyStr === 'CHFX') {
+    if (toCurrencyStr === 'USDC') {
+      registryToPriceMu = 1_000_000; // USDC is always 1 USD
+    } else if (toCurrencyStr === 'CHFX') {
       registryToPriceMu = registryChfxPriceMu;
     } else if (toCurrencyStr === 'TRYB') {
       registryToPriceMu = registryTrybPriceMu;
@@ -356,112 +327,64 @@ export default async function handler(
       registryToPriceMu = registrySekxPriceMu;
     }
     
-    // Calculate PRE-swap USD value for "to" currency (for reference)
-    const toMuPre = (toLiabilityPre * BigInt(registryToPriceMu)) / BigInt(1_000_000);
-    
-    // Calculate POST-swap USD value for "to" currency
-    // MUST use registry cached price to match Move contract
+    // Calculate POST-unstake USD value for "to" currency
     const toMuPost = (toLiabilityPost * BigInt(registryToPriceMu)) / BigInt(1_000_000);
     
-    // Calculate POST-swap coverage: (to_currency_usd / total_vault_usd) * 10000
-    // This is what determines the fee tier - it reflects how much of the total vault
-    // the "to" currency represents AFTER the withdrawal
+    // Calculate POST-unstake coverage: (to_currency_usd / total_vault_usd) * 10000
     const toCovBpsPost = totalMuPost > 0 
       ? Number((toMuPost * BigInt(10_000)) / totalMuPost)
       : 0;
     
     // Calculate withdrawal percentage: how much of the "to" currency pool is being withdrawn
-    // This is for reference: amountOutBeforeFee / toLiabilityPre
     const withdrawalPercentageBps = toLiabilityPre > 0
       ? Number((amountOutBeforeFeeUnits * BigInt(10_000)) / toLiabilityPre)
       : 0;
     
-    // The fee tier should be based on POST-swap coverage (toCovBpsPost), which reflects:
-    // 1. The withdrawal reducing the "to" currency pool
-    // 2. The "from" currency increasing the total vault
-    // This gives us the actual coverage percentage after the swap
-    
-    // However, we also calculate what the POST-swap coverage would be if we only consider
-    // the "to" currency's vault (not the total vault)
-    // This is: (toLiabilityPost / toLiabilityPre) * toCovBpsPre
-    // But actually, we need to account for the total vault changing
-    
-    // Calculate what percentage of the "to" currency remains after withdrawal
-    const toCurrencyRemainingBps = toLiabilityPre > 0
-      ? Number((toLiabilityPost * BigInt(10_000)) / toLiabilityPre)
-      : 0;
-    
-    // The POST-swap coverage should reflect the withdrawal impact on the total vault
-    // If withdrawing 11% of SEKX (22/200), and SEKX was 20% of total vault,
-    // then POST-swap: SEKX = 20% * 89% = 17.8% of total vault (if total vault stayed same)
-    // But total vault increases (from currency added), so actual coverage is lower
-    
     // Calculate withdrawal percentage and pool utilization for 'to' currency
-    // This matches the Move contract's swap_regional function exactly
-    // Contract uses: pool.tryb_liability_units (or chfx/sekx) for to_remaining
     const toRemaining = toLiabilityPre;
     
-    // Safety check: ensure we have valid values
-    if (toRemaining < 0n || amountOutBeforeFeeUnits < 0n) {
-      console.error('Invalid values for fee calculation:', {
-        toRemaining: toRemaining.toString(),
-        amountOutBeforeFeeUnits: amountOutBeforeFeeUnits.toString(),
-      });
-    }
-    
     // Total staked = remaining + amount being withdrawn (this transaction)
-    // Contract: to_total_staked = to_remaining + amount_out_before_fee_u64
     const toTotalStaked = toRemaining + amountOutBeforeFeeUnits;
     
     // withdrawal_pct_bps = (amount_out / total_staked_of_to_currency) * 10000
-    // Contract: withdrawal_pct_bps = ((amount_out_before_fee * 10_000u128) / (to_total_staked as u128)) as u64
     const withdrawalPctBps = toTotalStaked > 0n
       ? Number((amountOutBeforeFeeUnits * BigInt(10_000)) / toTotalStaked)
       : 0;
     
     // pool_utilization_bps: how much of the pool has already been withdrawn (before this transaction)
-    // Matches contract logic exactly
     let poolUtilizationBps: number;
     if (toRemaining === 0n) {
       // Empty pool: treat as 100% utilized
-      // Contract: if (to_remaining == 0u64) { 10000u64 }
       poolUtilizationBps = 10000;
     } else if (toRemaining < amountOutBeforeFeeUnits) {
       // Remaining is less than withdrawal: pool is highly utilized
-      // Contract: ((amount_out_before_fee_u64 * 10_000u64) / (to_remaining + amount_out_before_fee_u64)) as u64
       poolUtilizationBps = Number((amountOutBeforeFeeUnits * BigInt(10_000)) / (toRemaining + amountOutBeforeFeeUnits));
     } else {
       // Pool has sufficient remaining: use withdrawal percentage as utilization estimate
-      // Contract: withdrawal_pct_bps
       poolUtilizationBps = withdrawalPctBps;
     }
 
     // Debug logging
-    console.log('=== Simplified Fee Calculation ===');
+    console.log('=== Unstake Fee Calculation ===');
     console.log('To Currency:', toCurrencyStr);
-    console.log('  - Remaining (liability):', toRemaining.toString(), 'units');
+    console.log('  - Remaining (liability/reserve):', toRemaining.toString(), 'units');
     console.log('  - Amount out (before fee):', amountOutBeforeFeeUnits.toString(), 'units');
     console.log('  - Total staked:', toTotalStaked.toString(), 'units');
     console.log('  - Withdrawal %:', withdrawalPctBps, 'bps (' + (withdrawalPctBps / 100).toFixed(2) + '%)');
     console.log('  - Pool utilization:', poolUtilizationBps, 'bps (' + (poolUtilizationBps / 100).toFixed(2) + '%)');
-    console.log('  - Should trigger high fee?', poolUtilizationBps > 7000 || withdrawalPctBps > 3000);
     console.log('===================================');
 
-    // Compute simplified fee using compute_depth_fee_bps logic
-    // Base fee: 0.05% = 5 bps
-    // Match contract exactly: compute_depth_fee_bps function
+    // Compute unstake fee using compute_depth_fee_bps logic
+    // Base fee: 0.3% = 30 bps (default for unstake)
     let feeBps: number;
-    const baseFeeBps = 5;
+    const baseFeeBps = 30; // 0.3% default for unstake
 
-    // Contract: if (pool_utilization_bps > 7000u64 || withdrawal_pct_bps > 3000u64)
-    // Ensure we're comparing numbers, not BigInt
     const poolUtilizationBpsNum = Number(poolUtilizationBps);
     const withdrawalPctBpsNum = Number(withdrawalPctBps);
     
     // If pool is >70% utilized OR withdrawal >30%, apply high fee
     if (poolUtilizationBpsNum > 7000 || withdrawalPctBpsNum > 3000) {
       // High fee: 40-50% depending on severity
-      // Contract logic matches exactly
       if (poolUtilizationBpsNum > 9000) {
         feeBps = 5000; // 50% fee if pool >90% utilized
       } else if (poolUtilizationBpsNum > 8000) {
@@ -472,11 +395,11 @@ export default async function handler(
         feeBps = 4000; // 40% fee otherwise
       }
     } else {
-      feeBps = baseFeeBps; // 5 bps (0.05%) when healthy
+      feeBps = baseFeeBps; // 30 bps (0.3%) when healthy
     }
     
     // Debug: Log fee calculation
-    console.log('Fee calculation:', {
+    console.log('Unstake fee calculation:', {
       withdrawalPctBps,
       poolUtilizationBps,
       feeBps,
@@ -484,14 +407,13 @@ export default async function handler(
     });
 
     // Calculate final amount out after fee
-    // Match contract exactly: payout_units = ((amount_out_before_fee * fee_multiplier) / 10_000u128) as u64
     // Use BigInt to avoid floating point rounding errors
     const feeMultiplier = BigInt(10_000 - feeBps);
     const amountOutAfterFeeUnits = (amountOutBeforeFee * feeMultiplier) / BigInt(10_000);
     const amountOutAfterFee = Number(amountOutAfterFeeUnits);
 
     // Calculate fee in USD terms
-    const usdValueIn = Number((amountInUnits * BigInt(fromPriceMu)) / BigInt(1_000_000));
+    const usdValueIn = Number((amountInUnits * BigInt(sbxPriceMu)) / BigInt(1_000_000));
     const usdValueOut = Number((BigInt(amountOutAfterFee) * BigInt(toPriceMu)) / BigInt(1_000_000));
     const feeUsd = usdValueIn - usdValueOut;
 
@@ -504,7 +426,6 @@ export default async function handler(
     }
 
     return res.status(200).json({
-      fromCurrency: fromCurrencyStr,
       toCurrency: toCurrencyStr,
       amountIn: amountNum,
       amountOut: amountOutAfterFee / 1_000_000, // Convert back to human-readable
@@ -516,7 +437,6 @@ export default async function handler(
       withdrawalPctBps,
       poolUtilizationBps,
       // Return prices used for calculation so frontend can use exact same prices
-      fromPriceMu, // Price in micro-USD (use this in transaction)
       toPriceMu,   // Price in micro-USD (use this in transaction)
       // Metadata
       metadata: {
@@ -529,13 +449,13 @@ export default async function handler(
       },
     });
   } catch (error: any) {
-    console.error('Swap rate calculation error:', {
+    console.error('Unstake rate calculation error:', {
       error: error.message,
       stack: error.stack,
       query: req.query,
     });
     return res.status(500).json({
-      error: 'Failed to calculate swap rate',
+      error: 'Failed to calculate unstake rate',
       message: error.message || 'Unknown error occurred',
       details: process.env.NODE_ENV === 'development' ? error.stack : undefined,
     });

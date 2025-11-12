@@ -57,7 +57,9 @@ module first_package::sbx_pool {
         /// Balance reserves for regional currencies (transferred from users during swaps)
         chfx_reserve: Balance<CHFX>,
         tryb_reserve: Balance<TRYB>,
-        sekx_reserve: Balance<SEKX>
+        sekx_reserve: Balance<SEKX>,
+        /// USDC balance reserve (for unstaking)
+        usdc_reserve_balance: Balance<USDC>
     }
 
     /// Per-user account state (staking status)
@@ -151,7 +153,8 @@ module first_package::sbx_pool {
             sbx_treasury,
             chfx_reserve: coin::into_balance(chfx_coin),
             tryb_reserve: coin::into_balance(tryb_coin),
-            sekx_reserve: coin::into_balance(sekx_coin)
+            sekx_reserve: coin::into_balance(sekx_coin),
+            usdc_reserve_balance: balance::zero<USDC>()
         };
         transfer::share_object(pool);
     }
@@ -878,6 +881,13 @@ module first_package::sbx_pool {
     public entry fun receive_sekx(pool: &mut Pool, coin: Coin<SEKX>) {
         balance::join(&mut pool.sekx_reserve, coin::into_balance(coin));
     }
+    
+    /// Receive USDC coin and add to pool reserves
+    /// Entry function to receive coins transferred to the pool
+    /// Note: This should be called when USDC is staked (stake_usdc should be updated to accept Coin<USDC>)
+    public entry fun receive_usdc(pool: &mut Pool, coin: Coin<USDC>) {
+        balance::join(&mut pool.usdc_reserve_balance, coin::into_balance(coin));
+    }
 
     /// Unstake USDC by burning SBX. Applies depth-aware fee.
     /// Users can unstake anytime (before or after epoch completion).
@@ -938,11 +948,16 @@ module first_package::sbx_pool {
         let fee_usd_mu = sbx_u128 - net_usd_mu;
         let net_u64 = net_usd_mu as u64;
         assert!(pool.usdc_reserve >= net_u64, E_RESERVE_BREACH);
+        assert!(balance::value(&pool.usdc_reserve_balance) >= net_u64, E_RESERVE_BREACH);
 
         // Burn SBX tokens
         sbx::burn(&mut pool.sbx_treasury, sbx_coin);
         pool.total_sbx_supply = pool.total_sbx_supply - sbx_amount;
         pool.usdc_reserve = pool.usdc_reserve - net_u64;
+        
+        // Transfer USDC from pool reserves to user
+        let payout_coin = coin::from_balance(balance::split(&mut pool.usdc_reserve_balance, net_u64), ctx);
+        transfer::public_transfer(payout_coin, tx_context::sender(ctx));
         
         // Note: We don't reduce staked_usdc here because:
         // - If user has SBX > staked_usdc, they're withdrawing yield (not original stake)
@@ -1015,11 +1030,16 @@ module first_package::sbx_pool {
         // Convert to CHFX units
         let payout_units = ((net_usd_mu * 1_000_000u128) / (chfx_price_microusd as u128)) as u64;
         assert!(pool.chfx_liability_units >= payout_units, E_RESERVE_BREACH);
+        assert!(balance::value(&pool.chfx_reserve) >= payout_units, E_RESERVE_BREACH);
 
         // Burn SBX tokens and reduce liability
         sbx::burn(&mut pool.sbx_treasury, sbx_coin);
         pool.total_sbx_supply = pool.total_sbx_supply - sbx_amount;
         pool.chfx_liability_units = pool.chfx_liability_units - payout_units;
+        
+        // Transfer CHFX from pool reserves to user
+        let payout_coin = coin::from_balance(balance::split(&mut pool.chfx_reserve, payout_units), ctx);
+        transfer::public_transfer(payout_coin, tx_context::sender(ctx));
         
         // Reduce staked amount (user unstaking)
         account.staked_chfx = account.staked_chfx - payout_units;
@@ -1085,10 +1105,16 @@ module first_package::sbx_pool {
         let fee_usd_mu = sbx_u128 - net_usd_mu;
         let payout_units = ((net_usd_mu * 1_000_000u128) / (tryb_price_microusd as u128)) as u64;
         assert!(pool.tryb_liability_units >= payout_units, E_RESERVE_BREACH);
+        assert!(balance::value(&pool.tryb_reserve) >= payout_units, E_RESERVE_BREACH);
+        
         // Burn SBX tokens and reduce liability
         sbx::burn(&mut pool.sbx_treasury, sbx_coin);
         pool.total_sbx_supply = pool.total_sbx_supply - sbx_amount;
         pool.tryb_liability_units = pool.tryb_liability_units - payout_units;
+        
+        // Transfer TRYB from pool reserves to user
+        let payout_coin = coin::from_balance(balance::split(&mut pool.tryb_reserve, payout_units), ctx);
+        transfer::public_transfer(payout_coin, tx_context::sender(ctx));
         
         // Reduce staked amount (user unstaking)
         account.staked_tryb = account.staked_tryb - payout_units;
@@ -1154,10 +1180,16 @@ module first_package::sbx_pool {
         let fee_usd_mu = sbx_u128 - net_usd_mu;
         let payout_units = ((net_usd_mu * 1_000_000u128) / (sekx_price_microusd as u128)) as u64;
         assert!(pool.sekx_liability_units >= payout_units, E_RESERVE_BREACH);
+        assert!(balance::value(&pool.sekx_reserve) >= payout_units, E_RESERVE_BREACH);
+        
         // Burn SBX tokens and reduce liability
         sbx::burn(&mut pool.sbx_treasury, sbx_coin);
         pool.total_sbx_supply = pool.total_sbx_supply - sbx_amount;
         pool.sekx_liability_units = pool.sekx_liability_units - payout_units;
+        
+        // Transfer SEKX from pool reserves to user
+        let payout_coin = coin::from_balance(balance::split(&mut pool.sekx_reserve, payout_units), ctx);
+        transfer::public_transfer(payout_coin, tx_context::sender(ctx));
         
         // Reduce staked amount (user unstaking)
         account.staked_sekx = account.staked_sekx - payout_units;
