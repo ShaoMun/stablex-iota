@@ -1,6 +1,7 @@
 import { useEffect, useRef, useMemo } from "react";
 import { useRouter } from "next/router";
 import Script from "next/script";
+import { TextAnimate } from "@/components/ui/text-animate";
 
 declare global {
   namespace JSX {
@@ -138,23 +139,55 @@ export default function Home() {
         {/* Left Bottom Text */}
         <div className="absolute bottom-8 left-8 z-20">
           <div className="flex flex-col gap-2">
-            <h2 className="text-5xl md:text-6xl lg:text-7xl font-bold text-white leading-tight">
+            <TextAnimate
+              as="h2"
+              className="text-5xl md:text-6xl lg:text-7xl font-bold text-white leading-tight"
+              style={{ fontFamily: 'var(--font-dohyeon), sans-serif' }}
+              animation="blurInUp"
+              by="line"
+              delay={0.2}
+              once={true}
+            >
               7 Continents
-            </h2>
-            <h2 className="text-4xl md:text-5xl lg:text-6xl font-semibold text-white/90 leading-tight">
+            </TextAnimate>
+            <TextAnimate
+              as="h2"
+              className="text-4xl md:text-5xl lg:text-6xl font-semibold text-white/90 leading-tight"
+              style={{ fontFamily: 'var(--font-dohyeon), sans-serif' }}
+              animation="blurInUp"
+              by="line"
+              delay={0.4}
+              once={true}
+            >
               Multiple Currencies
-            </h2>
-            <h2 className="text-3xl md:text-4xl lg:text-5xl font-medium text-white/80 leading-tight">
+            </TextAnimate>
+            <TextAnimate
+              as="h2"
+              className="text-3xl md:text-4xl lg:text-5xl font-medium text-white/80 leading-tight"
+              style={{ fontFamily: 'var(--font-dohyeon), sans-serif' }}
+              animation="blurInUp"
+              by="line"
+              delay={0.6}
+              once={true}
+            >
               Unified Liquidity
-            </h2>
+            </TextAnimate>
           </div>
         </div>
 
         {/* Middle Right Description */}
         <div className="absolute top-1/2 right-8 -translate-y-1/2 z-20 max-w-xs">
-          <p className="text-sm text-zinc-400 leading-relaxed">
-          A stablecoin-focused exchange on IOTA. Swap directly between regional stablecoins with no intermediate—lower fees, faster execution. Deposit any stablecoin, earn unified yield, able to unlock your liquidity when you need it.
-          </p>
+          <TextAnimate
+            as="p"
+            className="text-sm text-zinc-400 leading-relaxed"
+            animation="fadeIn"
+            by="word"
+            delay={0.1}
+            duration={0.2}
+            once={true}
+          >
+            A stablecoin-focused exchange on IOTA. Swap directly between regional stablecoins with no intermediate—lower fees, faster execution. Deposit any stablecoin, earn unified yield, able to unlock your liquidity when you need it.
+          </TextAnimate>
         </div>
 
         {/* Header */}

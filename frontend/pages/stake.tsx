@@ -29,6 +29,7 @@ export default function StakePage() {
   const [currencyPrice, setCurrencyPrice] = useState<number>(1.00); // Default to 1.00 for USDC
   const [loadingPrice, setLoadingPrice] = useState<boolean>(false);
   const [isFeesExpanded, setIsFeesExpanded] = useState<boolean>(false);
+  const [isMounted, setIsMounted] = useState<boolean>(false);
   
   const currentAccount = useCurrentAccount();
   const isWalletConnected = !!currentAccount;
@@ -118,6 +119,11 @@ export default function StakePage() {
     totalFees: 0,
   });
   const [loadingFees, setLoadingFees] = useState(false);
+
+  // Trigger animation on mount
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   // Fetch real fees from the pool contract
   useEffect(() => {
@@ -938,7 +944,7 @@ export default function StakePage() {
     <AppLayout activeTab="stake">
       {/* Main Glass Card */}
         <div 
-          className="relative rounded-3xl backdrop-blur-xl overflow-hidden"
+          className={`relative rounded-3xl backdrop-blur-xl overflow-hidden ${isMounted ? 'page-container-enter' : 'opacity-0'}`}
           style={{
             background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.15) 0%, rgba(200, 200, 200, 0.1) 50%, rgba(255, 255, 255, 0.15) 100%), rgba(255, 255, 255, 0.05)',
             border: '1px solid rgba(255, 255, 255, 0.4)',

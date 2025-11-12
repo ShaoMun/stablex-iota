@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import AppLayout from "@/components/AppLayout";
 import FAQ from "@/components/FAQ";
 import { useCurrentAccount, ConnectModal } from "@iota/dapp-kit";
@@ -6,6 +6,7 @@ import { useCurrentAccount, ConnectModal } from "@iota/dapp-kit";
 export default function MigratePage() {
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "deactivating">("active");
+  const [isMounted, setIsMounted] = useState<boolean>(false);
   
   const currentAccount = useCurrentAccount();
   const isWalletConnected = !!currentAccount;
@@ -23,11 +24,16 @@ export default function MigratePage() {
     console.log("Unstake Instantly");
   };
 
+  // Trigger animation on mount
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
   return (
     <AppLayout activeTab="migrate">
       {/* Main Glass Card */}
       <div 
-        className="relative rounded-3xl backdrop-blur-xl overflow-hidden"
+        className={`relative rounded-3xl backdrop-blur-xl overflow-hidden ${isMounted ? 'page-container-enter' : 'opacity-0'}`}
         style={{
           background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.15) 0%, rgba(200, 200, 200, 0.1) 50%, rgba(255, 255, 255, 0.15) 100%), rgba(255, 255, 255, 0.05)',
           border: '1px solid rgba(255, 255, 255, 0.4)',

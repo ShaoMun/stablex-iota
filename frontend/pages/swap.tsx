@@ -24,6 +24,7 @@ export default function SwapPage() {
   // Store prices from API to ensure exact match with calculation
   const [swapFromPriceMu, setSwapFromPriceMu] = useState<number>(0);
   const [swapToPriceMu, setSwapToPriceMu] = useState<number>(0);
+  const [isMounted, setIsMounted] = useState<boolean>(false);
   
   const currentAccount = useCurrentAccount();
   const isWalletConnected = !!currentAccount;
@@ -117,6 +118,11 @@ export default function SwapPage() {
     TRYB: 'USD-TRY',
     SEKX: 'USD-SEK',
   };
+
+  // Trigger animation on mount
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   // Fetch price for fromCurrency
   useEffect(() => {
@@ -566,7 +572,7 @@ export default function SwapPage() {
     <AppLayout activeTab="swap">
       {/* Main Glass Card */}
         <div 
-          className="relative rounded-3xl backdrop-blur-xl overflow-hidden"
+          className={`relative rounded-3xl backdrop-blur-xl overflow-hidden ${isMounted ? 'page-container-enter' : 'opacity-0'}`}
           style={{
             background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.15) 0%, rgba(200, 200, 200, 0.1) 50%, rgba(255, 255, 255, 0.15) 100%), rgba(255, 255, 255, 0.05)',
             border: '1px solid rgba(255, 255, 255, 0.4)',

@@ -9,7 +9,7 @@ type Currency = "USDC" | "CHFX" | "TRYB" | "SEKX";
 
 export default function UnstakePage() {
   const [toCurrency, setToCurrency] = useState<Currency>("USDC");
-  const [sbxAmount, setSbxAmount] = useState<string>("1");
+  const [sbxAmount, setSbxAmount] = useState<string>("0");
   const [toAmount, setToAmount] = useState<string>("0");
   const [isToCurrencyModalOpen, setIsToCurrencyModalOpen] = useState(false);
   const [sbxBalance, setSbxBalance] = useState<string>("0.000000");
@@ -19,6 +19,7 @@ export default function UnstakePage() {
   const [unstakeTier, setUnstakeTier] = useState<1 | 2 | null>(null);
   const [loadingUnstakeRate, setLoadingUnstakeRate] = useState<boolean>(false);
   const [unstakeToPriceMu, setUnstakeToPriceMu] = useState<number>(0);
+  const [isMounted, setIsMounted] = useState<boolean>(false);
   
   const currentAccount = useCurrentAccount();
   const isWalletConnected = !!currentAccount;
@@ -139,6 +140,10 @@ export default function UnstakePage() {
     }
   };
 
+  // Trigger animation on mount
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   // Fetch SBX balance when wallet connects
   useEffect(() => {
@@ -531,7 +536,7 @@ export default function UnstakePage() {
     <AppLayout activeTab="unstake">
       {/* Main Glass Card */}
       <div 
-        className="relative rounded-3xl backdrop-blur-xl overflow-hidden"
+        className={`relative rounded-3xl backdrop-blur-xl overflow-hidden ${isMounted ? 'page-container-enter' : 'opacity-0'}`}
         style={{
           background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.15) 0%, rgba(200, 200, 200, 0.1) 50%, rgba(255, 255, 255, 0.15) 100%), rgba(255, 255, 255, 0.05)',
           border: '1px solid rgba(255, 255, 255, 0.4)',
