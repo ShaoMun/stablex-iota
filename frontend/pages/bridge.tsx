@@ -150,7 +150,7 @@ export default function BridgePage() {
     try {
       const amountMicro = BigInt(Math.floor(amount * 1_000_000));
       // Convert EVM address to 20-byte array for L1 bridge
-      const recipientEvmBytes = Array.from(l1AddressToEvmBytes(recipientAddress));
+      const recipientEvmBytes = l1AddressToEvmBytes(recipientAddress);
 
       // Get coin objects
       let coinType = "";
@@ -167,7 +167,7 @@ export default function BridgePage() {
       }
 
       const coins = await client.getCoins({
-        owner: iotaAccount,
+        owner: iotaAccount.address,
         coinType,
       });
 
@@ -186,7 +186,7 @@ export default function BridgePage() {
 
       // Build transaction
       const txb = new Transaction();
-      txb.setSender(iotaAccount);
+      txb.setSender(iotaAccount.address);
       const bridgeRef = txb.object(L1_BRIDGE_OBJECT_ID);
 
       // Prepare coin
@@ -206,7 +206,7 @@ export default function BridgePage() {
         const coinRefs = coinObjects.map(id => txb.object(id));
         const primaryCoin = coinRefs[0];
         for (let i = 1; i < coinRefs.length; i++) {
-          txb.mergeCoins(primaryCoin, coinRefs[i]);
+          txb.mergeCoins(primaryCoin, [coinRefs[i]]);
         }
         const splitCommandIndex = coinRefs.length - 1;
         txb.splitCoins(primaryCoin, [amountMicro]);
@@ -224,11 +224,11 @@ export default function BridgePage() {
         arguments: [
           bridgeRef,
           coinToLock,
-          txb.pure(recipientEvmBytes, "vector<u8>"),
+          txb.pure(recipientEvmBytes),
         ],
       });
 
-      signAndExecuteTransaction({ transaction: txb });
+      signAndExecuteTransaction({ transaction: txb as any });
     } catch (error: any) {
       console.error("Bridge error:", error);
       setIsBridging(false);
@@ -329,7 +329,7 @@ export default function BridgePage() {
   };
 
   return (
-    <AppLayout>
+    <AppLayout activeTab="swap">
       <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 py-12 px-4 sm:px-6 lg:px-8">
         <div className="max-w-2xl mx-auto">
           <h1 className="text-4xl font-bold text-center mb-8 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
@@ -515,7 +515,7 @@ export default function BridgePage() {
           <CurrencyModal
             isOpen={isCurrencyModalOpen}
             onClose={() => setIsCurrencyModalOpen(false)}
-            selectedCurrency={selectedCurrency}
+            selectedCurrency={(selectedCurrency === "SBX" ? null : selectedCurrency) as "USDC" | "CHFX" | "TRYB" | "SEKX" | "JPYC" | "MYRC" | "XSGD" | null}
             onSelect={(currency) => {
               setSelectedCurrency(currency as Currency);
               setIsCurrencyModalOpen(false);

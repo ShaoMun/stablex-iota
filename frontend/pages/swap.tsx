@@ -50,6 +50,7 @@ export default function SwapPage() {
 
   // Currency code mapping (0 = CHFX, 1 = TRYB, 2 = SEKX)
   const currencyCodes: Record<Currency, number> = {
+    USDC: 0, // Not used in L1 swaps, but required for type
     CHFX: 0,
     TRYB: 1,
     SEKX: 2,
@@ -410,6 +411,7 @@ export default function SwapPage() {
 
       // Currency codes: CHFX=1, TRYB=2, SEKX=3 (matching contract)
       const currencyCodesEVM: Record<Currency, number> = {
+        USDC: 0, // Not used in EVM swaps, but required for type
         CHFX: 1,
         TRYB: 2,
         SEKX: 3,
@@ -505,6 +507,10 @@ export default function SwapPage() {
       // Get coin objects for fromCurrency
       // Use the correct package ID from POOL_PACKAGE_ID
       const currencyInfo: Record<Currency, { packageAddress: string; coinType: string }> = {
+        USDC: {
+          packageAddress: POOL_PACKAGE_ID,
+          coinType: `${POOL_PACKAGE_ID}::usdc::USDC`
+        },
         CHFX: {
           packageAddress: POOL_PACKAGE_ID,
           coinType: `${POOL_PACKAGE_ID}::chfx::CHFX`
@@ -559,7 +565,7 @@ export default function SwapPage() {
       }
 
       // Build transaction
-      const txb = new Transaction(client);
+      const txb = new Transaction();
       const accountRef = txb.object(accountObjectId);
       const poolRef = txb.object(POOL_OBJECT_ID);
       const registryRef = txb.object(REGISTRY_OBJECT_ID);
@@ -885,8 +891,11 @@ export default function SwapPage() {
         onClose={() => setIsFromCurrencyModalOpen(false)}
         selectedCurrency={fromCurrency}
         onSelect={(currency) => {
-          setFromCurrency(currency);
-          setIsFromCurrencyModalOpen(false);
+          // Only accept currencies supported by swap page
+          if (currency === "USDC" || currency === "CHFX" || currency === "TRYB" || currency === "SEKX") {
+            setFromCurrency(currency as Currency);
+            setIsFromCurrencyModalOpen(false);
+          }
         }}
         excludedCurrencies={["USDC"]}
         refreshTrigger={snackbar.digest} // Refresh balances when transaction completes
@@ -896,8 +905,11 @@ export default function SwapPage() {
         onClose={() => setIsToCurrencyModalOpen(false)}
         selectedCurrency={toCurrency}
         onSelect={(currency) => {
-          setToCurrency(currency);
-          setIsToCurrencyModalOpen(false);
+          // Only accept currencies supported by swap page
+          if (currency === "USDC" || currency === "CHFX" || currency === "TRYB" || currency === "SEKX") {
+            setToCurrency(currency as Currency);
+            setIsToCurrencyModalOpen(false);
+          }
         }}
         excludedCurrencies={["USDC"]}
         refreshTrigger={snackbar.digest} // Refresh balances when transaction completes

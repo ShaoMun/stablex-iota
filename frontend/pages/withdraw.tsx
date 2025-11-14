@@ -133,7 +133,8 @@ export default function WithdrawPage() {
         if (accountObjects.data && accountObjects.data.length > 0) {
           const accountData = accountObjects.data[0].data?.content;
           if (accountData && 'fields' in accountData) {
-            const stakedUsdc = accountData.fields?.staked_usdc;
+            const fields = accountData.fields as any;
+            const stakedUsdc = fields?.staked_usdc;
             if (stakedUsdc) {
               usdcStakedAmount = BigInt(stakedUsdc);
             }
@@ -254,7 +255,8 @@ export default function WithdrawPage() {
         if (accountObjects.data && accountObjects.data.length > 0) {
           const accountData = accountObjects.data[0].data?.content;
           if (accountData && 'fields' in accountData) {
-            const stakedUsdc = accountData.fields?.staked_usdc;
+            const fields = accountData.fields as any;
+            const stakedUsdc = fields?.staked_usdc;
             if (stakedUsdc) {
               usdcStakedAmount = BigInt(stakedUsdc);
             }
@@ -333,7 +335,8 @@ export default function WithdrawPage() {
       const accountData = accountObjects.data[0].data?.content;
       let usdcStakedAmount = BigInt(0);
       if (accountData && 'fields' in accountData) {
-        const stakedUsdc = accountData.fields?.staked_usdc;
+        const fields = accountData.fields as any;
+        const stakedUsdc = fields?.staked_usdc;
         if (stakedUsdc) {
           usdcStakedAmount = BigInt(stakedUsdc);
         }
@@ -448,7 +451,7 @@ export default function WithdrawPage() {
         // Merge all other coins into the primary coin
         // Each mergeCoins creates a command, so we need to track the command index
         for (let i = 1; i < coinRefs.length; i++) {
-          txb.mergeCoins(primaryCoin, coinRefs[i]);
+          txb.mergeCoins(primaryCoin, [coinRefs[i]]);
         }
         
         // Split to get exact amount
