@@ -6,10 +6,10 @@ interface FAQItem {
 }
 
 interface FAQProps {
-  items: FAQItem[];
+  items?: FAQItem[];
 }
 
-export default function FAQ({ items }: FAQProps) {
+export default function FAQ({ items = [] }: FAQProps) {
   const [openIndex, setOpenIndex] = useState<number | null>(null);
 
   return (

@@ -2,8 +2,12 @@ import { useState, useEffect, useRef } from "react";
 import CurrencyModal from "@/components/CurrencyModal";
 import AppLayout from "@/components/AppLayout";
 import FAQ from "@/components/FAQ";
-import { useCurrentAccount, ConnectModal, useSignAndExecuteTransaction, useIotaClient } from "@iota/dapp-kit";
+import { useCurrentAccount, useSignAndExecuteTransaction, useIotaClient } from "@iota/dapp-kit";
 import { Transaction } from "@iota/iota-sdk/transactions";
+import { useAccount, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
+import { ethers } from "ethers";
+import { useWalletType } from "@/lib/useWalletType";
+import { TOKEN_ADDRESSES } from "@/lib/addTokenToMetaMask";
 
 type Currency = "USDC" | "CHFX" | "TRYB" | "SEKX" | "JPYC" | "MYRC" | "XSGD";
 
@@ -32,18 +36,20 @@ export default function StakePage() {
   const [isMounted, setIsMounted] = useState<boolean>(false);
   
   const currentAccount = useCurrentAccount();
-  const isWalletConnected = !!currentAccount;
-  const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
+  const evmAccount = useAccount();
+  const walletType = useWalletType();
   const client = useIotaClient();
   const [isStaking, setIsStaking] = useState(false);
-  const [snackbar, setSnackbar] = useState<{ show: boolean; digest?: string; error?: boolean; message?: string }>({ show: false });
+  const [snackbar, setSnackbar] = useState<{ show: boolean; digest?: string; txHash?: string; error?: boolean; message?: string; isEVM?: boolean }>({ show: false });
   const snackbarTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Contract addresses - Updated after redeployment with shared objects
+  // L1 Contract addresses
   const POOL_PACKAGE_ID = '0x1cf79de8cac02b52fa384df41e7712b5bfadeae2d097a818008780cf7d7783c6';
-  // Pool and Registry created as shared objects - Updated Dec 2024 with coin transfer logic
   const POOL_OBJECT_ID = process.env.NEXT_PUBLIC_POOL_OBJECT_ID || "0x8587158f53289362bb94530c6e174ae414e6eea32c9400cfc6da2704e80c5517";
   const REGISTRY_OBJECT_ID = process.env.NEXT_PUBLIC_REGISTRY_OBJECT_ID || "0xb1e480f286dfb4e668235acca148be2ec901aedeed62d79aa4a1e5d01642c4ad";
+
+  // EVM Contract addresses
+  const EVM_POOL_ADDRESS = process.env.NEXT_PUBLIC_EVM_POOL_ADDRESS || "0x0Bd0C0F30b84007fcDC44756E077BbF91d12b48d";
 
   const { mutate: signAndExecuteTransaction, mutateAsync: signAndExecuteTransactionAsync } = useSignAndExecuteTransaction({
     onSuccess: (result) => {
@@ -290,13 +296,170 @@ export default function StakePage() {
     fetchPrice();
   }, [selectedCurrency]);
 
-  const handleConnectWallet = () => {
-    setIsConnectModalOpen(true);
+  const handleStake = async () => {
+    // Check which wallet is connected
+    if (walletType === 'evm') {
+      await handleStakeEVM();
+    } else if (walletType === 'iota') {
+      await handleStakeL1();
+    } else {
+      alert("Please connect either IOTA or EVM wallet first");
+      return;
+    }
   };
 
-  const handleStake = async () => {
+  // EVM Staking
+  const handleStakeEVM = async () => {
+    if (!evmAccount.isConnected || !evmAccount.address) {
+      alert("Please connect your EVM wallet first");
+      return;
+    }
+
+    if (!EVM_POOL_ADDRESS) {
+      alert("EVM Pool contract not deployed yet. Please use IOTA L1 for now.");
+      return;
+    }
+
+    const amount = parseFloat(stakeAmount);
+    if (isNaN(amount) || amount <= 0) {
+      alert("Please enter a valid amount");
+      return;
+    }
+
+    setIsStaking(true);
+
+    try {
+      const amountMicro = BigInt(Math.floor(amount * 1_000_000));
+      
+      // Fetch prices and convert to micro-USD (uint64)
+      const pricePromises: Promise<number>[] = [];
+      const currencies = ['CHFX', 'TRYB', 'SEKX'];
+      
+      for (const curr of currencies) {
+        const pair = currencyPricePairs[curr as Currency];
+        pricePromises.push(
+          fetch(`/api/currency-price?pair=${pair}`)
+            .then(res => res.json())
+            .then(data => {
+              const price = parseFloat(data.price) || 0;
+              if (price <= 0) return 0;
+              // Convert to micro-USD: (1 / price) * 1_000_000
+              // Use Math.floor to ensure integer
+              const priceMicro = Math.floor((1 / price) * 1_000_000);
+              // Ensure it's a safe integer
+              if (!Number.isSafeInteger(priceMicro) || priceMicro <= 0) {
+                console.error(`Invalid price calculation for ${curr}:`, price, priceMicro);
+                return 0;
+              }
+              return priceMicro;
+            })
+            .catch(() => 0)
+        );
+      }
+
+      const [chfxPriceMu, trybPriceMu, sekxPriceMu] = await Promise.all(pricePromises);
+      
+      // Ensure prices are valid integers (uint64)
+      if (chfxPriceMu <= 0 || trybPriceMu <= 0 || sekxPriceMu <= 0) {
+        throw new Error("Failed to fetch valid prices. Please try again.");
+      }
+
+      // Get provider and signer
+      const provider = new ethers.BrowserProvider(window.ethereum!);
+      const signer = await provider.getSigner();
+
+      // Get token address
+      const tokenAddress = TOKEN_ADDRESSES[selectedCurrency];
+      if (!tokenAddress) {
+        throw new Error(`Token address not found for ${selectedCurrency}`);
+      }
+
+      // Approve token spending
+      const tokenContract = new ethers.Contract(
+        tokenAddress,
+        [
+          "function approve(address spender, uint256 amount) external returns (bool)",
+          "function allowance(address owner, address spender) external view returns (uint256)",
+        ],
+        signer
+      );
+
+      const currentAllowance = await tokenContract.allowance(evmAccount.address, EVM_POOL_ADDRESS);
+      if (currentAllowance < amountMicro) {
+        const approveTx = await tokenContract.approve(EVM_POOL_ADDRESS, ethers.MaxUint256);
+        await approveTx.wait();
+      }
+
+      // Call stake function
+      const poolContract = new ethers.Contract(
+        EVM_POOL_ADDRESS,
+        [
+          "function stakeUSDC(uint256 amount, uint64 chfxPriceMu, uint64 trybPriceMu, uint64 sekxPriceMu) external",
+          "function stakeCHFX(uint256 amount, uint64 priceMicroUSD) external",
+          "function stakeTRYB(uint256 amount, uint64 priceMicroUSD) external",
+          "function stakeSEKX(uint256 amount, uint64 priceMicroUSD) external",
+        ],
+        signer
+      );
+
+      let tx;
+      // Convert prices to uint64 - ensure they're integers
+      // Use parseInt to ensure integer conversion (uint64 in Solidity)
+      const chfxPriceMuUint64 = parseInt(String(chfxPriceMu), 10);
+      const trybPriceMuUint64 = parseInt(String(trybPriceMu), 10);
+      const sekxPriceMuUint64 = parseInt(String(sekxPriceMu), 10);
+      
+      // Validate prices are positive integers
+      if (!Number.isInteger(chfxPriceMuUint64) || chfxPriceMuUint64 <= 0 || chfxPriceMuUint64 > 18446744073709551615) {
+        throw new Error(`Invalid CHFX price: ${chfxPriceMu} -> ${chfxPriceMuUint64}`);
+      }
+      if (!Number.isInteger(trybPriceMuUint64) || trybPriceMuUint64 <= 0 || trybPriceMuUint64 > 18446744073709551615) {
+        throw new Error(`Invalid TRYB price: ${trybPriceMu} -> ${trybPriceMuUint64}`);
+      }
+      if (!Number.isInteger(sekxPriceMuUint64) || sekxPriceMuUint64 <= 0 || sekxPriceMuUint64 > 18446744073709551615) {
+        throw new Error(`Invalid SEKX price: ${sekxPriceMu} -> ${sekxPriceMuUint64}`);
+      }
+      
+      console.log("Staking with prices:", { 
+        currency: selectedCurrency,
+        chfxPriceMuUint64, 
+        trybPriceMuUint64, 
+        sekxPriceMuUint64,
+        amountMicro: amountMicro.toString()
+      });
+      
+      if (selectedCurrency === "USDC") {
+        tx = await poolContract.stakeUSDC(
+          amountMicro, 
+          chfxPriceMuUint64, 
+          trybPriceMuUint64, 
+          sekxPriceMuUint64
+        );
+      } else if (selectedCurrency === "CHFX") {
+        tx = await poolContract.stakeCHFX(amountMicro, chfxPriceMuUint64);
+      } else if (selectedCurrency === "TRYB") {
+        tx = await poolContract.stakeTRYB(amountMicro, trybPriceMuUint64);
+      } else if (selectedCurrency === "SEKX") {
+        tx = await poolContract.stakeSEKX(amountMicro, sekxPriceMuUint64);
+      } else {
+        throw new Error(`${selectedCurrency} staking not supported on EVM yet`);
+      }
+
+      await tx.wait();
+
+      setIsStaking(false);
+      setSnackbar({ show: true, txHash: tx.hash, error: false, isEVM: true });
+    } catch (error: any) {
+      console.error("EVM Stake error:", error);
+      setIsStaking(false);
+      setSnackbar({ show: true, error: true, message: error.message || "Staking failed" });
+    }
+  };
+
+  // L1 Staking (existing logic)
+  const handleStakeL1 = async () => {
     if (!currentAccount) {
-      alert("Please connect your wallet first");
+      alert("Please connect your IOTA wallet first");
       return;
     }
 
@@ -945,9 +1108,14 @@ export default function StakePage() {
   };
 
   const handleSnackbarClick = () => {
-    if (snackbar.digest && !snackbar.error) {
-      // Open IOTA explorer for successful transactions
-      window.open(`https://explorer.iota.org/transaction/${snackbar.digest}?network=testnet`, '_blank', 'noopener,noreferrer');
+    if (!snackbar.error) {
+      if (snackbar.isEVM && snackbar.txHash) {
+        // Open EVM explorer for EVM transactions
+        window.open(`https://explorer.evm.testnet.iotaledger.net/tx/${snackbar.txHash}`, '_blank', 'noopener,noreferrer');
+      } else if (snackbar.digest) {
+        // Open IOTA L1 explorer for L1 transactions
+        window.open(`https://explorer.iota.org/transaction/${snackbar.digest}?network=testnet`, '_blank', 'noopener,noreferrer');
+      }
     }
   };
 
@@ -1172,11 +1340,17 @@ export default function StakePage() {
 
             {/* Connect Wallet / Stake Button */}
             <button
-              onClick={isWalletConnected ? handleStake : handleConnectWallet}
-              className="w-full py-4 rounded-xl font-semibold text-black text-base transition-all bg-gradient-to-r from-zinc-200/80 to-white/70 hover:to-white ring-1 ring-inset ring-white/30 shadow-[0_4px_20px_rgba(255,255,255,0.12)] active:scale-[0.99]"
+              onClick={handleStake}
+              disabled={!walletType || isStaking}
+              className="w-full py-4 rounded-xl font-semibold text-black text-base transition-all bg-gradient-to-r from-zinc-200/80 to-white/70 hover:to-white ring-1 ring-inset ring-white/30 shadow-[0_4px_20px_rgba(255,255,255,0.12)] active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {isWalletConnected ? "Stake" : "Connect Wallet"}
+              {isStaking ? "Staking..." : walletType ? `Stake ${selectedCurrency}` : "Connect Wallet"}
             </button>
+            {walletType && (
+              <p className="text-xs text-zinc-500 mt-2 text-center">
+                Connected: {walletType === 'iota' ? 'IOTA L1' : 'EVM'}
+              </p>
+            )}
           </div>
         </div>
 
@@ -1215,12 +1389,6 @@ export default function StakePage() {
         refreshTrigger={snackbar.digest} // Refresh balances when transaction completes
       />
 
-          {/* Wallet Connection Modal */}
-          <ConnectModal
-            trigger={<button style={{ display: 'none' }} />}
-            open={isConnectModalOpen}
-            onOpenChange={setIsConnectModalOpen}
-          />
 
           {/* Success/Error Snackbar */}
           {snackbar.show && (
@@ -1250,9 +1418,16 @@ export default function StakePage() {
                       <polyline points="20 6 9 17 4 12"></polyline>
                     </svg>
                   )}
-                  <span className="text-white font-medium text-sm">
-                    {snackbar.error ? (snackbar.message || 'Transaction failed') : 'Transaction successful'}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-white font-medium text-sm">
+                      {snackbar.error ? (snackbar.message || 'Transaction failed') : 'Transaction successful'}
+                    </span>
+                    {!snackbar.error && (snackbar.digest || snackbar.txHash) && (
+                      <span className="text-white/70 text-xs">
+                        {snackbar.isEVM ? '(EVM)' : '(L1)'}
+                      </span>
+                    )}
+                  </div>
                   {!snackbar.error && (
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-white/80">
                       <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>

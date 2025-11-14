@@ -33,3 +33,4 @@ echo ""
 echo "Or manually mint tokens:"
 echo "  iota client call --package $PACKAGE_ID --module usdc --function mint --args <TREASURY_USDC> $RECIPIENT 10000000000 --gas-budget 10000000"
 
+

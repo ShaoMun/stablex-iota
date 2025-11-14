@@ -4,6 +4,10 @@ import AppLayout from "@/components/AppLayout";
 import FAQ from "@/components/FAQ";
 import { useCurrentAccount, ConnectModal, useSignAndExecuteTransaction, useIotaClient } from "@iota/dapp-kit";
 import { Transaction } from "@iota/iota-sdk/transactions";
+import { useAccount } from "wagmi";
+import { ethers } from "ethers";
+import { useWalletType } from "@/lib/useWalletType";
+import { TOKEN_ADDRESSES } from "@/lib/addTokenToMetaMask";
 
 type Currency = "USDC" | "CHFX" | "TRYB" | "SEKX";
 
@@ -27,17 +31,22 @@ export default function SwapPage() {
   const [isMounted, setIsMounted] = useState<boolean>(false);
   
   const currentAccount = useCurrentAccount();
-  const isWalletConnected = !!currentAccount;
+  const evmAccount = useAccount();
+  const walletType = useWalletType();
+  const isWalletConnected = !!currentAccount || evmAccount.isConnected;
   const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
   const client = useIotaClient();
   const [isSwapping, setIsSwapping] = useState(false);
-  const [snackbar, setSnackbar] = useState<{ show: boolean; digest?: string; error?: boolean; message?: string }>({ show: false });
+  const [snackbar, setSnackbar] = useState<{ show: boolean; digest?: string; txHash?: string; error?: boolean; message?: string; isEVM?: boolean }>({ show: false });
   const snackbarTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Contract addresses - Updated Dec 2024 with coin transfer logic
+  // L1 Contract addresses
   const POOL_PACKAGE_ID = "0x1cf79de8cac02b52fa384df41e7712b5bfadeae2d097a818008780cf7d7783c6";
   const POOL_OBJECT_ID = "0x8587158f53289362bb94530c6e174ae414e6eea32c9400cfc6da2704e80c5517";
   const REGISTRY_OBJECT_ID = "0xb1e480f286dfb4e668235acca148be2ec901aedeed62d79aa4a1e5d01642c4ad";
+
+  // EVM Contract addresses
+  const EVM_POOL_ADDRESS = process.env.NEXT_PUBLIC_EVM_POOL_ADDRESS || "0x0Bd0C0F30b84007fcDC44756E077BbF91d12b48d";
 
   // Currency code mapping (0 = CHFX, 1 = TRYB, 2 = SEKX)
   const currencyCodes: Record<Currency, number> = {
@@ -321,6 +330,136 @@ export default function SwapPage() {
   };
 
   const handleSwap = async () => {
+    // Check which wallet is connected
+    if (walletType === 'evm') {
+      await handleSwapEVM();
+    } else if (walletType === 'iota') {
+      await handleSwapL1();
+    } else {
+      alert("Please connect either IOTA or EVM wallet first");
+      return;
+    }
+  };
+
+  // EVM Swap (NEW FUNCTION)
+  const handleSwapEVM = async () => {
+    if (!evmAccount.isConnected || !evmAccount.address) {
+      alert("Please connect your EVM wallet first");
+      return;
+    }
+
+    if (!EVM_POOL_ADDRESS) {
+      alert("EVM Pool contract not deployed yet. Please use IOTA L1 for now.");
+      return;
+    }
+
+    if (!fromCurrency || !toCurrency) {
+      alert("Please select currencies");
+      return;
+    }
+
+    const amount = parseFloat(fromAmount);
+    if (amount <= 0) {
+      alert("Please enter a valid amount");
+      return;
+    }
+
+    if (swapFeeBps === 0) {
+      alert("Please wait for swap rate calculation");
+      return;
+    }
+
+    setIsSwapping(true);
+
+    try {
+      const amountMicro = BigInt(Math.floor(amount * 1_000_000));
+
+      // Get provider and signer
+      const provider = new ethers.BrowserProvider(window.ethereum!);
+      const signer = await provider.getSigner();
+
+      // Get token address for fromCurrency
+      const fromTokenAddress = TOKEN_ADDRESSES[fromCurrency];
+      if (!fromTokenAddress) {
+        throw new Error(`Token address not found for ${fromCurrency}`);
+      }
+
+      // Approve token spending
+      const tokenContract = new ethers.Contract(
+        fromTokenAddress,
+        [
+          "function approve(address spender, uint256 amount) external returns (bool)",
+          "function allowance(address owner, address spender) external view returns (uint256)",
+        ],
+        signer
+      );
+
+      const currentAllowance = await tokenContract.allowance(evmAccount.address, EVM_POOL_ADDRESS);
+      if (currentAllowance < amountMicro) {
+        const approveTx = await tokenContract.approve(EVM_POOL_ADDRESS, ethers.MaxUint256);
+        await approveTx.wait();
+      }
+
+      // Get prices (convert to uint64)
+      const fromPriceMu = swapFromPriceMu > 0 
+        ? parseInt(String(swapFromPriceMu), 10)
+        : Math.floor(fromCurrencyPrice * 1_000_000);
+      const toPriceMu = swapToPriceMu > 0 
+        ? parseInt(String(swapToPriceMu), 10)
+        : Math.floor(toCurrencyPrice * 1_000_000);
+
+      // Currency codes: CHFX=1, TRYB=2, SEKX=3 (matching contract)
+      const currencyCodesEVM: Record<Currency, number> = {
+        CHFX: 1,
+        TRYB: 2,
+        SEKX: 3,
+      };
+
+      const fromType = currencyCodesEVM[fromCurrency];
+      const toType = currencyCodesEVM[toCurrency];
+
+      // Call swap function
+      const poolContract = new ethers.Contract(
+        EVM_POOL_ADDRESS,
+        [
+          "function swapRegional(uint8 fromType, uint8 toType, uint256 amountIn, uint64 priceFromMu, uint64 priceToMu) external",
+        ],
+        signer
+      );
+
+      const tx = await poolContract.swapRegional(
+        fromType,
+        toType,
+        amountMicro,
+        fromPriceMu,
+        toPriceMu
+      );
+
+      await tx.wait();
+
+      setIsSwapping(false);
+      setSnackbar({ show: true, txHash: tx.hash, error: false, isEVM: true });
+      if (snackbarTimeoutRef.current) {
+        clearTimeout(snackbarTimeoutRef.current);
+      }
+      snackbarTimeoutRef.current = setTimeout(() => {
+        setSnackbar({ show: false });
+      }, 5000);
+    } catch (error: any) {
+      console.error("EVM Swap error:", error);
+      setIsSwapping(false);
+      setSnackbar({ show: true, error: true, message: error.message || "Swap failed" });
+      if (snackbarTimeoutRef.current) {
+        clearTimeout(snackbarTimeoutRef.current);
+      }
+      snackbarTimeoutRef.current = setTimeout(() => {
+        setSnackbar({ show: false });
+      }, 5000);
+    }
+  };
+
+  // L1 Swap (existing logic, renamed from handleSwap)
+  const handleSwapL1 = async () => {
     if (!currentAccount || !client || !fromCurrency || !toCurrency) {
       alert("Please connect your wallet and select currencies");
       return;
@@ -562,9 +701,14 @@ export default function SwapPage() {
   };
 
   const handleSnackbarClick = () => {
-    if (snackbar.digest && !snackbar.error) {
-      // Open IOTA explorer for successful transactions
-      window.open(`https://explorer.iota.org/transaction/${snackbar.digest}?network=testnet`, '_blank', 'noopener,noreferrer');
+    if (!snackbar.error) {
+      if (snackbar.isEVM && snackbar.txHash) {
+        // Open EVM explorer for EVM transactions
+        window.open(`https://explorer.evm.testnet.iotaledger.net/tx/${snackbar.txHash}`, '_blank', 'noopener,noreferrer');
+      } else if (snackbar.digest) {
+        // Open IOTA L1 explorer for L1 transactions
+        window.open(`https://explorer.iota.org/transaction/${snackbar.digest}?network=testnet`, '_blank', 'noopener,noreferrer');
+      }
     }
   };
 
@@ -696,11 +840,16 @@ export default function SwapPage() {
             {/* Connect Wallet / Swap Button */}
             <button
               onClick={isWalletConnected ? handleSwap : handleConnectWallet}
-              disabled={isSwapping || !fromCurrency || !toCurrency || parseFloat(fromAmount) <= 0 || parseFloat(toAmount) <= 0 || loadingSwapRate}
+              disabled={!walletType || isSwapping || !fromCurrency || !toCurrency || parseFloat(fromAmount) <= 0 || parseFloat(toAmount) <= 0 || loadingSwapRate}
               className="w-full py-4 rounded-xl font-semibold text-black text-base transition-all bg-gradient-to-r from-zinc-200/80 to-white/70 hover:to-white ring-1 ring-inset ring-white/30 shadow-[0_4px_20px_rgba(255,255,255,0.12)] active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {isSwapping ? "Swapping..." : isWalletConnected ? "Swap" : "Connect Wallet"}
+              {isSwapping ? "Swapping..." : walletType ? "Swap" : "Connect Wallet"}
             </button>
+            {walletType && (
+              <p className="text-xs text-zinc-500 mt-2 text-center">
+                Connected: {walletType === 'iota' ? 'IOTA L1' : 'EVM'}
+              </p>
+            )}
           </div>
         </div>
 
@@ -763,10 +912,10 @@ export default function SwapPage() {
 
       {/* Success/Error Snackbar */}
       {snackbar.show && (
-        <div
-          onClick={snackbar.error ? undefined : handleSnackbarClick}
-          className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-bottom-5 ${snackbar.error ? '' : 'cursor-pointer'}`}
-        >
+          <div
+            onClick={snackbar.error ? undefined : handleSnackbarClick}
+            className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-bottom-5 ${snackbar.error || (!snackbar.digest && !snackbar.txHash) ? '' : 'cursor-pointer'}`}
+          >
           <div
             className="px-6 py-3 rounded-xl backdrop-blur-xl border border-white/20 shadow-lg transition-all hover:scale-105"
             style={snackbar.error ? {
@@ -789,9 +938,16 @@ export default function SwapPage() {
                   <polyline points="20 6 9 17 4 12"></polyline>
                 </svg>
               )}
-              <span className="text-white font-medium text-sm">
-                {snackbar.error ? (snackbar.message || 'Transaction failed') : 'Transaction successful'}
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-white font-medium text-sm">
+                  {snackbar.error ? (snackbar.message || 'Transaction failed') : 'Transaction successful'}
+                </span>
+                {!snackbar.error && (snackbar.digest || snackbar.txHash) && (
+                  <span className="text-white/70 text-xs">
+                    {snackbar.isEVM ? '(EVM)' : '(L1)'}
+                  </span>
+                )}
+              </div>
               {!snackbar.error && (
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-white/80">
                   <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>

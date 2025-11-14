@@ -1,0 +1,50 @@
+=== STABLEX EVM CONTRACTS - DEPLOYED ADDRESSES ===
+Network: IOTA EVM Testnet
+Chain ID: 1076
+RPC URL: https://json-rpc.evm.testnet.iota.cafe
+Explorer: https://explorer.evm.testnet.iotaledger.net/
+
+=== TOKEN CONTRACTS ===
+CHFX:  0x956Cc9A9a71347b0d392D49DAdD49b4dC74b21bE
+TRYB:  0x00f791a9E86f58Af72179b432b060FD1C40b8268
+SEKX:  0x00fec4B374a0B74B4718AfefD41dB07469d85A71
+USDC:  0x34E1C1F3CFAa76C058eB6B7e77b0F81e1E6aB61f
+wSBX:  0x06812Ea1244a72dbBD581831B886F6F08b4475f5
+
+=== BRIDGE CONTRACT ===
+EVMBridge: 0x5bEACC92487733898E786138410E8AC9486CC418
+
+=== DEPLOYMENT WALLET ===
+Address: 0x63154C889dB2eD52B398eA0Bd11109C048E16D6C
+
+=== FRONTEND ENVIRONMENT VARIABLES ===
+Add these to frontend/.env.local:
+
+NEXT_PUBLIC_EVM_BRIDGE_ADDRESS=0x5bEACC92487733898E786138410E8AC9486CC418
+NEXT_PUBLIC_EVM_POOL_ADDRESS=0x0Bd0C0F30b84007fcDC44756E077BbF91d12b48d
+NEXT_PUBLIC_EVM_RPC_URL=https://json-rpc.evm.testnet.iota.cafe
+
+=== BRIDGE RELAYER ENVIRONMENT VARIABLES ===
+Add these to bridge-relayer/.env:
+
+EVM_RPC_URL=https://json-rpc.evm.testnet.iota.cafe
+EVM_BRIDGE_ADDRESS=0x5bEACC92487733898E786138410E8AC9486CC418
+EVM_PRIVATE_KEY=your_evm_private_key_here
+
+=== EXPLORER LINKS ===
+CHFX:   https://explorer.evm.testnet.iotaledger.net/address/0x956Cc9A9a71347b0d392D49DAdD49b4dC74b21bE
+TRYB:   https://explorer.evm.testnet.iotaledger.net/address/0x00f791a9E86f58Af72179b432b060FD1C40b8268
+SEKX:   https://explorer.evm.testnet.iotaledger.net/address/0x00fec4B374a0B74B4718AfefD41dB07469d85A71
+USDC:   https://explorer.evm.testnet.iotaledger.net/address/0x34E1C1F3CFAa76C058eB6B7e77b0F81e1E6aB61f
+wSBX:   https://explorer.evm.testnet.iotaledger.net/address/0x06812Ea1244a72dbBD581831B886F6F08b4475f5
+Bridge: https://explorer.evm.testnet.iotaledger.net/address/0x5bEACC92487733898E786138410E8AC9486CC418
+Pool:   https://explorer.evm.testnet.iotaledger.net/address/0x0Bd0C0F30b84007fcDC44756E077BbF91d12b48d
+
+
+
+=== POOL CONTRACT ===
+StableXPool: 0x0Bd0C0F30b84007fcDC44756E077BbF91d12b48d
+
+=== UPDATED wSBX ===
+wSBX (with pool support): 0x06812Ea1244a72dbBD581831B886F6F08b4475f5
+Old wSBX (deprecated): 0xf8bA1417dA2f8746364E3A325B457374Da531D9e

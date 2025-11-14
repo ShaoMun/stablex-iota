@@ -2,6 +2,10 @@ import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { useCurrentAccount, useIotaClient } from "@iota/dapp-kit";
 import { normalizeStructTag } from "@iota/iota-sdk/utils";
+import { useAccount } from "wagmi";
+import { ethers } from "ethers";
+import { useWalletType } from "@/lib/useWalletType";
+import { TOKEN_ADDRESSES } from "@/lib/addTokenToMetaMask";
 
 type Currency = "USDC" | "CHFX" | "TRYB" | "SEKX" | "JPYC" | "MYRC" | "XSGD";
 
@@ -16,10 +20,11 @@ interface CurrencyModalProps {
 
 const currencies: Currency[] = ["USDC", "CHFX", "TRYB", "SEKX", "JPYC", "MYRC", "XSGD"];
 
-// Package addresses for Move/IOTA tokens (equivalent to contract addresses)
-// Updated Dec 2024 with new package deployment
+// Package addresses for Move/IOTA tokens (L1)
 const NEW_PACKAGE_ID = "0x1cf79de8cac02b52fa384df41e7712b5bfadeae2d097a818008780cf7d7783c6";
-const currencyInfo: Record<Currency, { packageAddress: string; coinType: string }> = {
+
+// L1 currency info
+const l1CurrencyInfo: Record<Currency, { packageAddress: string; coinType: string }> = {
   USDC: {
     packageAddress: NEW_PACKAGE_ID,
     coinType: `${NEW_PACKAGE_ID}::usdc::USDC`
@@ -50,14 +55,29 @@ const currencyInfo: Record<Currency, { packageAddress: string; coinType: string 
   }
 };
 
+// EVM currency info (ERC-20 token addresses)
+const evmCurrencyInfo: Record<Currency, { address: string }> = {
+  USDC: { address: TOKEN_ADDRESSES.USDC },
+  CHFX: { address: TOKEN_ADDRESSES.CHFX },
+  TRYB: { address: TOKEN_ADDRESSES.TRYB },
+  SEKX: { address: TOKEN_ADDRESSES.SEKX },
+  JPYC: { address: "" }, // Not deployed on EVM yet
+  MYRC: { address: "" }, // Not deployed on EVM yet
+  XSGD: { address: "" }, // Not deployed on EVM yet
+};
+
 const truncateAddress = (address: string, startChars: number = 6, endChars: number = 6) => {
   if (address.length <= startChars + endChars) return address;
   return `${address.slice(0, startChars)}...${address.slice(-endChars)}`;
 };
 
-const getExplorerUrl = (packageAddress: string) => {
-  // IOTA Testnet Explorer URL
-  return `https://explorer.iota.org/object/${packageAddress}?network=testnet`;
+const getExplorerUrl = (address: string, isEVM: boolean = false) => {
+  if (isEVM) {
+    // IOTA EVM Testnet Explorer
+    return `https://explorer.evm.testnet.iotaledger.net/address/${address}`;
+  }
+  // IOTA L1 Testnet Explorer
+  return `https://explorer.iota.org/object/${address}?network=testnet`;
 };
 
 export default function CurrencyModal({ isOpen, onClose, selectedCurrency, onSelect, excludedCurrencies = [], refreshTrigger }: CurrencyModalProps) {
@@ -100,7 +120,21 @@ export default function CurrencyModal({ isOpen, onClose, selectedCurrency, onSel
   });
   
   const currentAccount = useCurrentAccount();
+  const evmAccount = useAccount();
+  const walletType = useWalletType();
   const client = useIotaClient();
+  
+  // Determine if we're on EVM or L1
+  const isEVM = walletType === 'evm';
+  const isL1 = walletType === 'iota';
+  
+  // Get currency info based on wallet type
+  const getCurrencyInfo = (currency: Currency) => {
+    if (isEVM) {
+      return evmCurrencyInfo[currency];
+    }
+    return l1CurrencyInfo[currency];
+  };
 
   // Currency to price pair mapping
   const currencyPricePairs: Record<Currency, string> = {
@@ -115,24 +149,82 @@ export default function CurrencyModal({ isOpen, onClose, selectedCurrency, onSel
 
   // Fetch balances for all currencies
   useEffect(() => {
-    if (!isOpen || !currentAccount || !client) {
-        // Reset balances if not connected
-        if (!currentAccount) {
-          setBalances({
-            USDC: "0",
-            CHFX: "0",
-            TRYB: "0",
-            SEKX: "0",
-            JPYC: "0",
-            MYRC: "0",
-            XSGD: "0",
-          });
-        }
+    if (!isOpen) {
       return;
     }
 
-    const fetchBalances = async () => {
-      try {
+    // Reset if no wallet connected
+    if (!isEVM && !isL1) {
+      setBalances({
+        USDC: "0",
+        CHFX: "0",
+        TRYB: "0",
+        SEKX: "0",
+        JPYC: "0",
+        MYRC: "0",
+        XSGD: "0",
+      });
+      return;
+    }
+
+    // Fetch EVM balances
+    if (isEVM && evmAccount.isConnected && evmAccount.address) {
+      const fetchEVMBalances = async () => {
+        try {
+          const provider = new ethers.BrowserProvider(window.ethereum!);
+          
+          for (const currency of currencies) {
+            setLoadingBalances(prev => ({ ...prev, [currency]: true }));
+            try {
+              const currencyInfo = evmCurrencyInfo[currency];
+              
+              // Skip currencies not deployed on EVM
+              if (!currencyInfo.address) {
+                setBalances(prev => ({ ...prev, [currency]: "0" }));
+                setLoadingBalances(prev => ({ ...prev, [currency]: false }));
+                continue;
+              }
+
+              const tokenContract = new ethers.Contract(
+                currencyInfo.address,
+                [
+                  "function balanceOf(address owner) external view returns (uint256)",
+                  "function decimals() external view returns (uint8)",
+                ],
+                provider
+              );
+
+              const [balance, decimals] = await Promise.all([
+                tokenContract.balanceOf(evmAccount.address),
+                tokenContract.decimals(),
+              ]);
+
+              const balanceNumber = Number(balance) / Math.pow(10, Number(decimals));
+              setBalances(prev => ({ ...prev, [currency]: balanceNumber.toFixed(6) }));
+            } catch (error) {
+              console.error(`Error fetching EVM balance for ${currency}:`, error);
+              setBalances(prev => ({ ...prev, [currency]: "0" }));
+            } finally {
+              setLoadingBalances(prev => ({ ...prev, [currency]: false }));
+            }
+          }
+        } catch (error) {
+          console.error("Error fetching EVM balances:", error);
+          currencies.forEach(currency => {
+            setBalances(prev => ({ ...prev, [currency]: "0" }));
+            setLoadingBalances(prev => ({ ...prev, [currency]: false }));
+          });
+        }
+      };
+
+      fetchEVMBalances();
+      return;
+    }
+
+    // Fetch L1 balances (existing logic)
+    if (isL1 && currentAccount && client) {
+      const fetchL1Balances = async () => {
+        try {
         // First, get all balances for the account
         const allBalances = await client.getAllBalances({
           owner: currentAccount.address,
@@ -167,11 +259,11 @@ export default function CurrencyModal({ isOpen, onClose, selectedCurrency, onSel
 
         console.log("All coin types found:", originalCoinTypes);
 
-        // Now match each currency to its balance
+            // Now match each currency to its balance
         for (const currency of currencies) {
           setLoadingBalances(prev => ({ ...prev, [currency]: true }));
           try {
-            const coinType = currencyInfo[currency].coinType;
+            const coinType = l1CurrencyInfo[currency].coinType;
             const normalizedType = normalizeStructTag(coinType);
             
             console.log(`Looking for ${currency} with coinType:`, normalizedType);
@@ -184,7 +276,7 @@ export default function CurrencyModal({ isOpen, onClose, selectedCurrency, onSel
             
             // Strategy 2: Match by package address + currency name (ONLY from correct package)
             if (!balance) {
-              const packageAddr = currencyInfo[currency].packageAddress.toLowerCase();
+              const packageAddr = l1CurrencyInfo[currency].packageAddress.toLowerCase();
               for (const [coinTypeKey, balanceValue] of balanceMap.entries()) {
                 const keyLower = coinTypeKey.toLowerCase();
                 // MUST include the correct package address AND currency name
@@ -257,10 +349,12 @@ export default function CurrencyModal({ isOpen, onClose, selectedCurrency, onSel
           setLoadingBalances(prev => ({ ...prev, [currency]: false }));
         });
       }
-    };
+      };
 
-    fetchBalances();
-  }, [isOpen, currentAccount, client, refreshTrigger]);
+      // Call the function
+      fetchL1Balances();
+    }
+  }, [isOpen, currentAccount, client, refreshTrigger, isEVM, isL1, evmAccount.isConnected, evmAccount.address]);
 
   // Fetch prices for currencies
   useEffect(() => {
@@ -325,14 +419,26 @@ export default function CurrencyModal({ isOpen, onClose, selectedCurrency, onSel
       return false;
     }
     
+    // For EVM, filter out currencies not deployed
+    if (isEVM) {
+      const currencyInfo = evmCurrencyInfo[currency];
+      if (!currencyInfo.address) {
+        return false;
+      }
+    }
+    
     const query = searchQuery.toLowerCase();
     const currencyName = currency.toLowerCase();
-    const packageAddress = currencyInfo[currency].packageAddress.toLowerCase();
-    const truncatedAddress = truncateAddress(currencyInfo[currency].packageAddress).toLowerCase();
+    const currencyInfo = getCurrencyInfo(currency);
+    const address = isEVM 
+      ? (currencyInfo as { address: string }).address 
+      : (currencyInfo as { packageAddress: string }).packageAddress;
+    const addressLower = address.toLowerCase();
+    const truncatedAddress = truncateAddress(address).toLowerCase();
     
     return (
       currencyName.includes(query) ||
-      packageAddress.includes(query) ||
+      addressLower.includes(query) ||
       truncatedAddress.includes(query)
     );
   });
@@ -411,15 +517,37 @@ export default function CurrencyModal({ isOpen, onClose, selectedCurrency, onSel
                     <div className="flex items-center gap-3 flex-1 min-w-0">
                       <div className="w-8 h-8 rounded-full bg-gradient-to-br from-white/40 to-white/10 ring-1 ring-inset ring-white/20 flex-shrink-0" />
                       <div className="flex flex-col gap-1 min-w-0">
-                        <span className="font-medium text-sm text-white">{currency}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-sm text-white">{currency}</span>
+                          {isEVM && (
+                            <span className="text-xs text-zinc-500 px-1.5 py-0.5 rounded bg-zinc-800/50">
+                              EVM
+                            </span>
+                          )}
+                          {isL1 && (
+                            <span className="text-xs text-zinc-500 px-1.5 py-0.5 rounded bg-zinc-800/50">
+                              L1
+                            </span>
+                          )}
+                        </div>
                         <div className="flex items-center gap-2">
                           <p className="text-xs text-zinc-500 font-mono">
-                            {truncateAddress(currencyInfo[currency].packageAddress)}
+                            {(() => {
+                              const currencyInfo = getCurrencyInfo(currency);
+                              const address = isEVM 
+                                ? (currencyInfo as { address: string }).address 
+                                : (currencyInfo as { packageAddress: string }).packageAddress;
+                              return truncateAddress(address);
+                            })()}
                           </p>
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              window.open(getExplorerUrl(currencyInfo[currency].packageAddress), '_blank', 'noopener,noreferrer');
+                              const currencyInfo = getCurrencyInfo(currency);
+                              const address = isEVM 
+                                ? (currencyInfo as { address: string }).address 
+                                : (currencyInfo as { packageAddress: string }).packageAddress;
+                              window.open(getExplorerUrl(address, isEVM), '_blank', 'noopener,noreferrer');
                             }}
                             className="text-zinc-600 hover:text-zinc-400 transition-colors p-0.5 flex-shrink-0"
                             title="View in explorer"

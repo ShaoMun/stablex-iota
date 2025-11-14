@@ -36,3 +36,4 @@ grep "TreasuryCap.*$PACKAGE_ID" "$DEPLOY_OUTPUT" | while IFS= read -r line; do
     fi
 done
 
+

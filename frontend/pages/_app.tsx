@@ -1,11 +1,15 @@
 import "@/styles/globals.css";
 import "@iota/dapp-kit/dist/index.css";
+import "@rainbow-me/rainbowkit/styles.css";
 import type { AppProps } from "next/app";
 import { Inter, Do_Hyeon } from "next/font/google";
 import { createNetworkConfig, IotaClientProvider, WalletProvider } from "@iota/dapp-kit";
 import { getFullnodeUrl } from "@iota/iota-sdk/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
+import { WagmiProvider } from 'wagmi';
+import { RainbowKitProvider } from '@rainbow-me/rainbowkit';
+import { wagmiConfig } from "@/lib/wagmiConfig";
 import ErrorBoundary from "@/components/ErrorBoundary";
 
 const inter = Inter({
@@ -103,16 +107,20 @@ export default function App({ Component, pageProps }: AppProps) {
   return (
     <ErrorBoundary>
       <div className={`${inter.variable} ${doHyeon.variable}`}>
-        <QueryClientProvider client={queryClient}>
-          <IotaClientProvider networks={networkConfig} defaultNetwork="testnet">
-            <WalletProvider 
-              storageKey="iota-wallet-connection"
-              autoConnect
-            >
-              <Component {...pageProps} />
-            </WalletProvider>
-          </IotaClientProvider>
-        </QueryClientProvider>
+        <WagmiProvider config={wagmiConfig}>
+          <QueryClientProvider client={queryClient}>
+            <RainbowKitProvider>
+              <IotaClientProvider networks={networkConfig} defaultNetwork="testnet">
+                <WalletProvider 
+                  storageKey="iota-wallet-connection"
+                  autoConnect
+                >
+                  <Component {...pageProps} />
+                </WalletProvider>
+              </IotaClientProvider>
+            </RainbowKitProvider>
+          </QueryClientProvider>
+        </WagmiProvider>
       </div>
     </ErrorBoundary>
   );

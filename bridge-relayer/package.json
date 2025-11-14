@@ -1,0 +1,24 @@
+{
+  "name": "stablex-bridge-relayer",
+  "version": "1.0.0",
+  "description": "Bridge relayer service for StableX cross-chain transfers",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "watch-l1": "node dist/l1-watcher.js",
+    "watch-evm": "node dist/evm-watcher.js",
+    "dev": "ts-node src/index.ts"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "ts-node": "^10.9.0",
+    "@types/node": "^20.0.0"
+  },
+  "dependencies": {
+    "@iota/iota-sdk": "^1.0.0",
+    "ethers": "^6.9.0",
+    "dotenv": "^16.3.1"
+  }
+}
+
