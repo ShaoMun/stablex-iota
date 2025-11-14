@@ -97,9 +97,9 @@ export function AnimatedBeamDemo() {
       {nodeRefs.map((nodeRef, index) => (
         <AnimatedBeam
           key={`center-to-${index}`}
-          containerRef={containerRef}
-          fromRef={centerRef}
-          toRef={nodeRef}
+          containerRef={containerRef as React.RefObject<HTMLDivElement>}
+          fromRef={centerRef as React.RefObject<HTMLDivElement>}
+          toRef={nodeRef as React.RefObject<HTMLDivElement>}
           curvature={0}
           pathWidth={3}
           pathOpacity={0.8}
@@ -117,9 +117,9 @@ export function AnimatedBeamDemo() {
         return (
           <AnimatedBeam
             key={`node-to-next-${index}`}
-            containerRef={containerRef}
-            fromRef={nodeRef}
-            toRef={nextNodeRef}
+            containerRef={containerRef as React.RefObject<HTMLDivElement>}
+            fromRef={nodeRef as React.RefObject<HTMLDivElement>}
+            toRef={nextNodeRef as React.RefObject<HTMLDivElement>}
             curvature={0}
             pathWidth={3}
             pathOpacity={0.8}
@@ -138,9 +138,9 @@ export function AnimatedBeamDemo() {
         return (
           <AnimatedBeam
             key={`next-to-center-${index}`}
-            containerRef={containerRef}
-            fromRef={nextNodeRef}
-            toRef={centerRef}
+            containerRef={containerRef as React.RefObject<HTMLDivElement>}
+            fromRef={nextNodeRef as React.RefObject<HTMLDivElement>}
+            toRef={centerRef as React.RefObject<HTMLDivElement>}
             curvature={0}
             pathWidth={3}
             pathOpacity={0.8}
