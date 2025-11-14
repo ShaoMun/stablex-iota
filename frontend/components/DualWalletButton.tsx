@@ -611,6 +611,7 @@ export default function DualWalletButton({ isDarkMode = true }: DualWalletButton
 
       {/* IOTA Connect Modal */}
       <ConnectModal
+        trigger={<button style={{ display: 'none' }} />}
         open={isIOTAModalOpen}
         onOpenChange={setIsIOTAModalOpen}
       />
