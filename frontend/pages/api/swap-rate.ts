@@ -402,7 +402,7 @@ export default async function handler(
     const toRemaining = toLiabilityPre;
     
     // Safety check: ensure we have valid values
-    if (toRemaining < 0n || amountOutBeforeFeeUnits < 0n) {
+    if (toRemaining < BigInt(0) || amountOutBeforeFeeUnits < BigInt(0)) {
       console.error('Invalid values for fee calculation:', {
         toRemaining: toRemaining.toString(),
         amountOutBeforeFeeUnits: amountOutBeforeFeeUnits.toString(),
@@ -415,14 +415,14 @@ export default async function handler(
     
     // withdrawal_pct_bps = (amount_out / total_staked_of_to_currency) * 10000
     // Contract: withdrawal_pct_bps = ((amount_out_before_fee * 10_000u128) / (to_total_staked as u128)) as u64
-    const withdrawalPctBps = toTotalStaked > 0n
+    const withdrawalPctBps = toTotalStaked > BigInt(0)
       ? Number((amountOutBeforeFeeUnits * BigInt(10_000)) / toTotalStaked)
       : 0;
     
     // pool_utilization_bps: how much of the pool has already been withdrawn (before this transaction)
     // Matches contract logic exactly
     let poolUtilizationBps: number;
-    if (toRemaining === 0n) {
+    if (toRemaining === BigInt(0)) {
       // Empty pool: treat as 100% utilized
       // Contract: if (to_remaining == 0u64) { 10000u64 }
       poolUtilizationBps = 10000;

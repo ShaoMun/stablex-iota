@@ -347,13 +347,13 @@ export default async function handler(
     const toTotalStaked = toRemaining + amountOutBeforeFeeUnits;
     
     // withdrawal_pct_bps = (amount_out / total_staked_of_to_currency) * 10000
-    const withdrawalPctBps = toTotalStaked > 0n
+    const withdrawalPctBps = toTotalStaked > BigInt(0)
       ? Number((amountOutBeforeFeeUnits * BigInt(10_000)) / toTotalStaked)
       : 0;
     
     // pool_utilization_bps: how much of the pool has already been withdrawn (before this transaction)
     let poolUtilizationBps: number;
-    if (toRemaining === 0n) {
+    if (toRemaining === BigInt(0)) {
       // Empty pool: treat as 100% utilized
       poolUtilizationBps = 10000;
     } else if (toRemaining < amountOutBeforeFeeUnits) {
