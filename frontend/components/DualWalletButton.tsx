@@ -2,8 +2,13 @@ import { useState, useEffect, useRef } from "react";
 import { ConnectModal, useDisconnectWallet, useCurrentAccount, useIotaClientContext } from "@iota/dapp-kit";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useDisconnect } from "wagmi";
+import { cn } from "@/lib/utils";
 
-export default function DualWalletButton() {
+interface DualWalletButtonProps {
+  isDarkMode?: boolean;
+}
+
+export default function DualWalletButton({ isDarkMode = true }: DualWalletButtonProps) {
   const iotaAccount = useCurrentAccount();
   const { mutate: disconnectWallet } = useDisconnectWallet();
   const { disconnect: disconnectEVM } = useDisconnect();
@@ -77,22 +82,42 @@ export default function DualWalletButton() {
             <button
               ref={iotaButtonRef}
               onClick={() => setIsIOTADropdownOpen(!isIOTADropdownOpen)}
-              className="relative px-6 py-2.5 text-sm font-medium text-white rounded-lg overflow-hidden group transition-all duration-300 ease-out hover:scale-[1.02]"
-              style={{
+              className={cn(
+                "relative px-6 py-2.5 text-sm font-medium rounded-lg overflow-hidden group transition-all duration-300 ease-out hover:scale-[1.02]",
+                isDarkMode ? "text-white" : "text-gray-900"
+              )}
+              style={isDarkMode ? {
                 background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.05) 50%, rgba(200, 200, 255, 0.1) 100%)',
                 border: '1px solid rgba(255, 255, 255, 0.25)',
                 boxShadow: '0 4px 15px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2), inset 0 -1px 0 rgba(0, 0, 0, 0.2)',
                 backdropFilter: 'blur(12px)',
+              } : {
+                background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0.7) 50%, rgba(240, 240, 255, 0.8) 100%)',
+                border: '1px solid rgba(0, 0, 0, 0.1)',
+                boxShadow: '0 4px 15px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.8), inset 0 -1px 0 rgba(0, 0, 0, 0.05)',
+                backdropFilter: 'blur(12px)',
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'linear-gradient(135deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.08) 50%, rgba(200, 200, 255, 0.15) 100%)';
-                e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.35)';
-                e.currentTarget.style.boxShadow = '0 6px 20px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.3), inset 0 -1px 0 rgba(0, 0, 0, 0.2)';
+                if (isDarkMode) {
+                  e.currentTarget.style.background = 'linear-gradient(135deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.08) 50%, rgba(200, 200, 255, 0.15) 100%)';
+                  e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.35)';
+                  e.currentTarget.style.boxShadow = '0 6px 20px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.3), inset 0 -1px 0 rgba(0, 0, 0, 0.2)';
+                } else {
+                  e.currentTarget.style.background = 'linear-gradient(135deg, rgba(255, 255, 255, 1) 0%, rgba(255, 255, 255, 0.85) 50%, rgba(240, 240, 255, 0.95) 100%)';
+                  e.currentTarget.style.borderColor = 'rgba(0, 0, 0, 0.15)';
+                  e.currentTarget.style.boxShadow = '0 6px 20px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.9), inset 0 -1px 0 rgba(0, 0, 0, 0.08)';
+                }
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'linear-gradient(135deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.05) 50%, rgba(200, 200, 255, 0.1) 100%)';
-                e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.25)';
-                e.currentTarget.style.boxShadow = '0 4px 15px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2), inset 0 -1px 0 rgba(0, 0, 0, 0.2)';
+                if (isDarkMode) {
+                  e.currentTarget.style.background = 'linear-gradient(135deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.05) 50%, rgba(200, 200, 255, 0.1) 100%)';
+                  e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.25)';
+                  e.currentTarget.style.boxShadow = '0 4px 15px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2), inset 0 -1px 0 rgba(0, 0, 0, 0.2)';
+                } else {
+                  e.currentTarget.style.background = 'linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0.7) 50%, rgba(240, 240, 255, 0.8) 100%)';
+                  e.currentTarget.style.borderColor = 'rgba(0, 0, 0, 0.1)';
+                  e.currentTarget.style.boxShadow = '0 4px 15px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.8), inset 0 -1px 0 rgba(0, 0, 0, 0.05)';
+                }
               }}
             >
               <div 
@@ -118,19 +143,34 @@ export default function DualWalletButton() {
               <div
                 ref={iotaDropdownRef}
                 className="absolute right-0 mt-2 w-96 rounded-xl overflow-hidden backdrop-blur-xl z-50"
-                style={{
+                style={isDarkMode ? {
                   background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.15) 0%, rgba(200, 200, 200, 0.1) 50%, rgba(255, 255, 255, 0.15) 100%), rgba(255, 255, 255, 0.05)',
                   border: '1px solid rgba(255, 255, 255, 0.4)',
                   boxShadow: '0 8px 30px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.3), inset 0 -1px 0 rgba(0, 0, 0, 0.2)',
+                } : {
+                  background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.9) 50%, rgba(255, 255, 255, 0.95) 100%)',
+                  border: '1px solid rgba(0, 0, 0, 0.1)',
+                  boxShadow: '0 8px 30px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.9), inset 0 -1px 0 rgba(0, 0, 0, 0.05)',
                 }}
               >
                 <div className="p-5">
                   {/* Network Info */}
-                  <div className="mb-4 pb-4 border-b border-white/10">
-                    <p className="text-zinc-400 text-xs font-medium mb-2 uppercase tracking-wider">Network</p>
+                  <div className={cn(
+                    "mb-4 pb-4 border-b",
+                    isDarkMode ? "border-white/10" : "border-gray-200"
+                  )}>
+                    <p className={cn(
+                      "text-xs font-medium mb-2 uppercase tracking-wider",
+                      isDarkMode ? "text-zinc-400" : "text-gray-500"
+                    )}>Network</p>
                     <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-white/60 to-white/20 ring-1 ring-inset ring-white/40 flex items-center justify-center flex-shrink-0">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-white/80">
+                      <div className={cn(
+                        "w-8 h-8 rounded-full ring-1 ring-inset flex items-center justify-center flex-shrink-0",
+                        isDarkMode 
+                          ? "bg-gradient-to-br from-white/60 to-white/20 ring-white/40"
+                          : "bg-gradient-to-br from-gray-100 to-gray-200 ring-gray-300"
+                      )}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={isDarkMode ? "text-white/80" : "text-gray-700"}>
                           <circle cx="12" cy="12" r="10"></circle>
                           <line x1="12" y1="2" x2="12" y2="6"></line>
                           <line x1="12" y1="18" x2="12" y2="22"></line>
@@ -143,25 +183,43 @@ export default function DualWalletButton() {
                         </svg>
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-white font-medium text-sm truncate capitalize">
+                        <p className={cn(
+                          "font-medium text-sm truncate capitalize",
+                          isDarkMode ? "text-white" : "text-gray-900"
+                        )}>
                           {networkName}
                         </p>
                         <div className="flex items-center gap-1.5 mt-0.5">
                           <div className="w-1.5 h-1.5 rounded-full bg-green-400"></div>
-                          <p className="text-zinc-400 text-xs truncate">Connected</p>
+                          <p className={cn(
+                            "text-xs truncate",
+                            isDarkMode ? "text-zinc-400" : "text-gray-500"
+                          )}>Connected</p>
                         </div>
                       </div>
                     </div>
                   </div>
 
                   {/* Account Address */}
-                  <div className="mb-4 pb-4 border-b border-white/10">
-                    <p className="text-zinc-400 text-xs font-medium mb-2 uppercase tracking-wider">Account Address</p>
+                  <div className={cn(
+                    "mb-4 pb-4 border-b",
+                    isDarkMode ? "border-white/10" : "border-gray-200"
+                  )}>
+                    <p className={cn(
+                      "text-xs font-medium mb-2 uppercase tracking-wider",
+                      isDarkMode ? "text-zinc-400" : "text-gray-500"
+                    )}>Account Address</p>
                     <div className="flex items-start justify-between gap-3">
-                      <p className="text-white font-mono text-sm break-all flex-1">{iotaAccount.address}</p>
+                      <p className={cn(
+                        "font-mono text-sm break-all flex-1",
+                        isDarkMode ? "text-white" : "text-gray-900"
+                      )}>{iotaAccount.address}</p>
                       <button
                         onClick={() => copyToClipboard(iotaAccount.address, "iota-address")}
-                        className="flex-shrink-0 p-2 rounded-lg hover:bg-white/10 transition-colors"
+                        className={cn(
+                          "flex-shrink-0 p-2 rounded-lg transition-colors",
+                          isDarkMode ? "hover:bg-white/10" : "hover:bg-gray-100"
+                        )}
                         title={copiedField === "iota-address" ? "Copied!" : "Copy address"}
                       >
                         {copiedField === "iota-address" ? (
@@ -178,7 +236,7 @@ export default function DualWalletButton() {
                             strokeWidth="2"
                             strokeLinecap="round"
                             strokeLinejoin="round"
-                            className="text-zinc-400 hover:text-white"
+                            className={isDarkMode ? "text-zinc-400 hover:text-white" : "text-gray-400 hover:text-gray-700"}
                           >
                             <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
                             <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
@@ -190,9 +248,18 @@ export default function DualWalletButton() {
 
                   {/* Account Label (if available) */}
                   {iotaAccount.label && (
-                    <div className="mb-4 pb-4 border-b border-white/10">
-                      <p className="text-zinc-400 text-xs font-medium mb-2 uppercase tracking-wider">Account Label</p>
-                      <p className="text-white font-medium text-sm">{iotaAccount.label}</p>
+                    <div className={cn(
+                      "mb-4 pb-4 border-b",
+                      isDarkMode ? "border-white/10" : "border-gray-200"
+                    )}>
+                      <p className={cn(
+                        "text-xs font-medium mb-2 uppercase tracking-wider",
+                        isDarkMode ? "text-zinc-400" : "text-gray-500"
+                      )}>Account Label</p>
+                      <p className={cn(
+                        "font-medium text-sm",
+                        isDarkMode ? "text-white" : "text-gray-900"
+                      )}>{iotaAccount.label}</p>
                     </div>
                   )}
 
@@ -202,7 +269,12 @@ export default function DualWalletButton() {
                       disconnectWallet();
                       setIsIOTADropdownOpen(false);
                     }}
-                    className="w-full py-3 rounded-xl font-semibold text-white text-sm transition-all bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 ring-1 ring-inset ring-red-500/20 active:scale-[0.99]"
+                    className={cn(
+                      "w-full py-3 rounded-xl font-semibold text-sm transition-all active:scale-[0.99]",
+                      isDarkMode 
+                        ? "text-white bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 ring-1 ring-inset ring-red-500/20"
+                        : "text-white bg-red-500 hover:bg-red-600 border border-red-600 shadow-sm"
+                    )}
                   >
                     Disconnect Wallet
                   </button>
@@ -213,11 +285,19 @@ export default function DualWalletButton() {
         ) : (
           <button
             onClick={() => setIsIOTAModalOpen(true)}
-            className="relative px-6 py-2.5 text-sm font-medium text-white rounded-lg overflow-hidden group transition-all duration-300 ease-out hover:scale-[1.02]"
-            style={{
+            className={cn(
+              "relative px-6 py-2.5 text-sm font-medium rounded-lg overflow-hidden group transition-all duration-300 ease-out hover:scale-[1.02]",
+              isDarkMode ? "text-white" : "text-gray-900"
+            )}
+            style={isDarkMode ? {
               background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.05) 50%, rgba(200, 200, 255, 0.1) 100%)',
               border: '1px solid rgba(255, 255, 255, 0.25)',
               boxShadow: '0 4px 15px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2), inset 0 -1px 0 rgba(0, 0, 0, 0.2)',
+              backdropFilter: 'blur(12px)',
+            } : {
+              background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0.7) 50%, rgba(240, 240, 255, 0.8) 100%)',
+              border: '1px solid rgba(0, 0, 0, 0.1)',
+              boxShadow: '0 4px 15px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.8), inset 0 -1px 0 rgba(0, 0, 0, 0.05)',
               backdropFilter: 'blur(12px)',
             }}
           >
@@ -264,22 +344,42 @@ export default function DualWalletButton() {
                     <button
                       ref={evmButtonRef}
                       onClick={() => setIsEVMDropdownOpen(!isEVMDropdownOpen)}
-                      className="relative px-6 py-2.5 text-sm font-medium text-white rounded-lg overflow-hidden group transition-all duration-300 ease-out hover:scale-[1.02]"
-                      style={{
+                      className={cn(
+                        "relative px-6 py-2.5 text-sm font-medium rounded-lg overflow-hidden group transition-all duration-300 ease-out hover:scale-[1.02]",
+                        isDarkMode ? "text-white" : "text-gray-900"
+                      )}
+                      style={isDarkMode ? {
                         background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.05) 50%, rgba(200, 200, 255, 0.1) 100%)',
                         border: '1px solid rgba(255, 255, 255, 0.25)',
                         boxShadow: '0 4px 15px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2), inset 0 -1px 0 rgba(0, 0, 0, 0.2)',
                         backdropFilter: 'blur(12px)',
+                      } : {
+                        background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0.7) 50%, rgba(240, 240, 255, 0.8) 100%)',
+                        border: '1px solid rgba(0, 0, 0, 0.1)',
+                        boxShadow: '0 4px 15px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.8), inset 0 -1px 0 rgba(0, 0, 0, 0.05)',
+                        backdropFilter: 'blur(12px)',
                       }}
                       onMouseEnter={(e) => {
-                        e.currentTarget.style.background = 'linear-gradient(135deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.08) 50%, rgba(200, 200, 255, 0.15) 100%)';
-                        e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.35)';
-                        e.currentTarget.style.boxShadow = '0 6px 20px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.3), inset 0 -1px 0 rgba(0, 0, 0, 0.2)';
+                        if (isDarkMode) {
+                          e.currentTarget.style.background = 'linear-gradient(135deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.08) 50%, rgba(200, 200, 255, 0.15) 100%)';
+                          e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.35)';
+                          e.currentTarget.style.boxShadow = '0 6px 20px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.3), inset 0 -1px 0 rgba(0, 0, 0, 0.2)';
+                        } else {
+                          e.currentTarget.style.background = 'linear-gradient(135deg, rgba(255, 255, 255, 1) 0%, rgba(255, 255, 255, 0.85) 50%, rgba(240, 240, 255, 0.95) 100%)';
+                          e.currentTarget.style.borderColor = 'rgba(0, 0, 0, 0.15)';
+                          e.currentTarget.style.boxShadow = '0 6px 20px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.9), inset 0 -1px 0 rgba(0, 0, 0, 0.08)';
+                        }
                       }}
                       onMouseLeave={(e) => {
-                        e.currentTarget.style.background = 'linear-gradient(135deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.05) 50%, rgba(200, 200, 255, 0.1) 100%)';
-                        e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.25)';
-                        e.currentTarget.style.boxShadow = '0 4px 15px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2), inset 0 -1px 0 rgba(0, 0, 0, 0.2)';
+                        if (isDarkMode) {
+                          e.currentTarget.style.background = 'linear-gradient(135deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.05) 50%, rgba(200, 200, 255, 0.1) 100%)';
+                          e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.25)';
+                          e.currentTarget.style.boxShadow = '0 4px 15px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2), inset 0 -1px 0 rgba(0, 0, 0, 0.2)';
+                        } else {
+                          e.currentTarget.style.background = 'linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0.7) 50%, rgba(240, 240, 255, 0.8) 100%)';
+                          e.currentTarget.style.borderColor = 'rgba(0, 0, 0, 0.1)';
+                          e.currentTarget.style.boxShadow = '0 4px 15px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.8), inset 0 -1px 0 rgba(0, 0, 0, 0.05)';
+                        }
                       }}
                     >
                       <div 
@@ -305,22 +405,37 @@ export default function DualWalletButton() {
                       <div
                         ref={evmDropdownRef}
                         className="absolute right-0 mt-2 w-96 rounded-xl overflow-hidden backdrop-blur-xl z-50"
-                        style={{
+                        style={isDarkMode ? {
                           background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.15) 0%, rgba(200, 200, 200, 0.1) 50%, rgba(255, 255, 255, 0.15) 100%), rgba(255, 255, 255, 0.05)',
                           border: '1px solid rgba(255, 255, 255, 0.4)',
                           boxShadow: '0 8px 30px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.3), inset 0 -1px 0 rgba(0, 0, 0, 0.2)',
+                        } : {
+                          background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.9) 50%, rgba(255, 255, 255, 0.95) 100%)',
+                          border: '1px solid rgba(0, 0, 0, 0.1)',
+                          boxShadow: '0 8px 30px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.9), inset 0 -1px 0 rgba(0, 0, 0, 0.05)',
                         }}
                       >
                         <div className="p-5">
                           {/* Network Info */}
-                          <div className="mb-4 pb-4 border-b border-white/10">
-                            <p className="text-zinc-400 text-xs font-medium mb-2 uppercase tracking-wider">Network</p>
+                          <div className={cn(
+                            "mb-4 pb-4 border-b",
+                            isDarkMode ? "border-white/10" : "border-gray-200"
+                          )}>
+                            <p className={cn(
+                              "text-xs font-medium mb-2 uppercase tracking-wider",
+                              isDarkMode ? "text-zinc-400" : "text-gray-500"
+                            )}>Network</p>
                             <div className="flex items-center gap-2">
                               {chain.hasIcon && (
                                 <div
-                                  className="w-8 h-8 rounded-full bg-gradient-to-br from-white/60 to-white/20 ring-1 ring-inset ring-white/40 flex items-center justify-center flex-shrink-0"
+                                  className={cn(
+                                    "w-8 h-8 rounded-full ring-1 ring-inset flex items-center justify-center flex-shrink-0",
+                                    isDarkMode 
+                                      ? "bg-gradient-to-br from-white/60 to-white/20 ring-white/40"
+                                      : "bg-gradient-to-br from-gray-100 to-gray-200 ring-gray-300"
+                                  )}
                                   style={{
-                                    background: chain.iconBackground,
+                                    background: chain.iconBackground || (isDarkMode ? undefined : 'linear-gradient(to bottom right, rgb(243, 244, 246), rgb(229, 231, 235))'),
                                   }}
                                 >
                                   {chain.iconUrl && (
@@ -333,25 +448,43 @@ export default function DualWalletButton() {
                                 </div>
                               )}
                               <div className="flex-1 min-w-0">
-                                <p className="text-white font-medium text-sm truncate">
+                                <p className={cn(
+                                  "font-medium text-sm truncate",
+                                  isDarkMode ? "text-white" : "text-gray-900"
+                                )}>
                                   {chain.name}
                                 </p>
                                 <div className="flex items-center gap-1.5 mt-0.5">
                                   <div className="w-1.5 h-1.5 rounded-full bg-green-400"></div>
-                                  <p className="text-zinc-400 text-xs truncate">Chain ID: {chain.id}</p>
+                                  <p className={cn(
+                                    "text-xs truncate",
+                                    isDarkMode ? "text-zinc-400" : "text-gray-500"
+                                  )}>Chain ID: {chain.id}</p>
                                 </div>
                               </div>
                             </div>
                           </div>
 
                           {/* Account Address */}
-                          <div className="mb-4 pb-4 border-b border-white/10">
-                            <p className="text-zinc-400 text-xs font-medium mb-2 uppercase tracking-wider">Account Address</p>
+                          <div className={cn(
+                            "mb-4 pb-4 border-b",
+                            isDarkMode ? "border-white/10" : "border-gray-200"
+                          )}>
+                            <p className={cn(
+                              "text-xs font-medium mb-2 uppercase tracking-wider",
+                              isDarkMode ? "text-zinc-400" : "text-gray-500"
+                            )}>Account Address</p>
                             <div className="flex items-start justify-between gap-3">
-                              <p className="text-white font-mono text-sm break-all flex-1">{account.address}</p>
+                              <p className={cn(
+                                "font-mono text-sm break-all flex-1",
+                                isDarkMode ? "text-white" : "text-gray-900"
+                              )}>{account.address}</p>
                               <button
                                 onClick={() => copyToClipboard(account.address, "evm-address")}
-                                className="flex-shrink-0 p-2 rounded-lg hover:bg-white/10 transition-colors"
+                                className={cn(
+                                  "flex-shrink-0 p-2 rounded-lg transition-colors",
+                                  isDarkMode ? "hover:bg-white/10" : "hover:bg-gray-100"
+                                )}
                                 title={copiedField === "evm-address" ? "Copied!" : "Copy address"}
                               >
                                 {copiedField === "evm-address" ? (
@@ -368,7 +501,7 @@ export default function DualWalletButton() {
                                     strokeWidth="2"
                                     strokeLinecap="round"
                                     strokeLinejoin="round"
-                                    className="text-zinc-400 hover:text-white"
+                                    className={isDarkMode ? "text-zinc-400 hover:text-white" : "text-gray-400 hover:text-gray-700"}
                                   >
                                     <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
                                     <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
@@ -380,26 +513,48 @@ export default function DualWalletButton() {
 
                           {/* Account ENS Name (if available) */}
                           {account.ensName && (
-                            <div className="mb-4 pb-4 border-b border-white/10">
-                              <p className="text-zinc-400 text-xs font-medium mb-2 uppercase tracking-wider">ENS Name</p>
-                              <p className="text-white font-medium text-sm">{account.ensName}</p>
+                            <div className={cn(
+                              "mb-4 pb-4 border-b",
+                              isDarkMode ? "border-white/10" : "border-gray-200"
+                            )}>
+                              <p className={cn(
+                                "text-xs font-medium mb-2 uppercase tracking-wider",
+                                isDarkMode ? "text-zinc-400" : "text-gray-500"
+                              )}>ENS Name</p>
+                              <p className={cn(
+                                "font-medium text-sm",
+                                isDarkMode ? "text-white" : "text-gray-900"
+                              )}>{account.ensName}</p>
                             </div>
                           )}
 
                           {/* Actions */}
-                          <div className="mb-4 pb-4 border-b border-white/10 space-y-2">
+                          <div className={cn(
+                            "mb-4 pb-4 border-b space-y-2",
+                            isDarkMode ? "border-white/10" : "border-gray-200"
+                          )}>
                             <button
                               onClick={() => {
                                 openChainModal();
                                 setIsEVMDropdownOpen(false);
                               }}
-                              className="w-full py-2 px-3 rounded-lg font-medium text-white text-sm transition-all bg-white/5 hover:bg-white/10 border border-white/10"
+                              className={cn(
+                                "w-full py-2 px-3 rounded-lg font-medium text-sm transition-all border",
+                                isDarkMode 
+                                  ? "text-white bg-white/5 hover:bg-white/10 border-white/10"
+                                  : "text-gray-900 bg-gray-50 hover:bg-gray-100 border-gray-200"
+                              )}
                             >
                               Switch Network
                             </button>
                             <button
                               onClick={openAccountModal}
-                              className="w-full py-2 px-3 rounded-lg font-medium text-white text-sm transition-all bg-white/5 hover:bg-white/10 border border-white/10"
+                              className={cn(
+                                "w-full py-2 px-3 rounded-lg font-medium text-sm transition-all border",
+                                isDarkMode 
+                                  ? "text-white bg-white/5 hover:bg-white/10 border-white/10"
+                                  : "text-gray-900 bg-gray-50 hover:bg-gray-100 border-gray-200"
+                              )}
                             >
                               View Account
                             </button>
@@ -411,7 +566,12 @@ export default function DualWalletButton() {
                               disconnectEVM();
                               setIsEVMDropdownOpen(false);
                             }}
-                            className="w-full py-3 rounded-xl font-semibold text-white text-sm transition-all bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 ring-1 ring-inset ring-red-500/20 active:scale-[0.99]"
+                            className={cn(
+                              "w-full py-3 rounded-xl font-semibold text-sm transition-all active:scale-[0.99]",
+                              isDarkMode 
+                                ? "text-white bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 ring-1 ring-inset ring-red-500/20"
+                                : "text-white bg-red-500 hover:bg-red-600 border border-red-600 shadow-sm"
+                            )}
                           >
                             Disconnect Wallet
                           </button>
@@ -422,11 +582,19 @@ export default function DualWalletButton() {
                 ) : (
                   <button
                     onClick={openConnectModal}
-                    className="relative px-6 py-2.5 text-sm font-medium text-white rounded-lg overflow-hidden group transition-all duration-300 ease-out hover:scale-[1.02]"
-                    style={{
+                    className={cn(
+                      "relative px-6 py-2.5 text-sm font-medium rounded-lg overflow-hidden group transition-all duration-300 ease-out hover:scale-[1.02]",
+                      isDarkMode ? "text-white" : "text-gray-900"
+                    )}
+                    style={isDarkMode ? {
                       background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.05) 50%, rgba(200, 200, 255, 0.1) 100%)',
                       border: '1px solid rgba(255, 255, 255, 0.25)',
                       boxShadow: '0 4px 15px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2), inset 0 -1px 0 rgba(0, 0, 0, 0.2)',
+                      backdropFilter: 'blur(12px)',
+                    } : {
+                      background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0.7) 50%, rgba(240, 240, 255, 0.8) 100%)',
+                      border: '1px solid rgba(0, 0, 0, 0.1)',
+                      boxShadow: '0 4px 15px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.8), inset 0 -1px 0 rgba(0, 0, 0, 0.05)',
                       backdropFilter: 'blur(12px)',
                     }}
                   >

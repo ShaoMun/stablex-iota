@@ -369,7 +369,11 @@ export default function StakePage() {
       const signer = await provider.getSigner();
 
       // Get token address
-      const tokenAddress = TOKEN_ADDRESSES[selectedCurrency];
+      // Only USDC, CHFX, TRYB, SEKX are supported on EVM
+      if (selectedCurrency !== 'USDC' && selectedCurrency !== 'CHFX' && selectedCurrency !== 'TRYB' && selectedCurrency !== 'SEKX') {
+        throw new Error(`${selectedCurrency} staking is not supported on EVM yet`);
+      }
+      const tokenAddress = TOKEN_ADDRESSES[selectedCurrency as keyof typeof TOKEN_ADDRESSES];
       if (!tokenAddress) {
         throw new Error(`Token address not found for ${selectedCurrency}`);
       }
@@ -756,7 +760,7 @@ export default function StakePage() {
       }
 
       // Build transaction based on currency
-      const txb = new Transaction(client);
+      const txb = new Transaction();
 
       // Set sender
       txb.setSender(currentAccount.address);
@@ -900,12 +904,13 @@ export default function StakePage() {
         
         if (coinObjects.length === 1) {
           const coinBalance = BigInt(coins.data.find(c => c.coinObjectId === coinObjects[0])?.balance || 0);
-          if (coinBalance === amountMicro) {
+          const amountMicroBigInt = BigInt(amountMicro);
+          if (coinBalance === amountMicroBigInt) {
             // Exact amount - use whole coin
             usdcCoin = firstCoin;
           } else {
             // Split to get exact amount
-            txb.splitCoins(firstCoin, [amountMicro]);
+            txb.splitCoins(firstCoin, [amountMicroBigInt]);
             usdcCoin = { $kind: 'NestedResult' as const, NestedResult: [0, 0] };
           }
         } else {
@@ -915,12 +920,13 @@ export default function StakePage() {
           
           // Merge all other coins into the primary coin
           for (let i = 1; i < coinRefs.length; i++) {
-            txb.mergeCoins(primaryCoin, coinRefs[i]);
+            txb.mergeCoins(primaryCoin, [coinRefs[i]]);
           }
           
           // Split to get exact amount
           const splitCommandIndex = coinRefs.length - 1;
-          txb.splitCoins(primaryCoin, [amountMicro]);
+          const amountMicroBigInt = BigInt(amountMicro);
+          txb.splitCoins(primaryCoin, [amountMicroBigInt]);
           usdcCoin = { $kind: 'NestedResult' as const, NestedResult: [splitCommandIndex, 0] };
         }
         
@@ -950,7 +956,7 @@ export default function StakePage() {
           // Split the exact amount needed
           // splitCoins is the first actual command (object() and sharedObjectRef() are just references, not commands)
           // So splitCoins will be at index 0
-          txb.splitCoins(firstCoin, [amountMicro]);
+          txb.splitCoins(firstCoin, [BigInt(amountMicro)]);
           coinRef = { $kind: 'NestedResult' as const, NestedResult: [0, 0] };
         }
         
@@ -977,7 +983,7 @@ export default function StakePage() {
         } else {
           // splitCoins is the first actual command (object() and sharedObjectRef() are just references, not commands)
           // So splitCoins will be at index 0
-          txb.splitCoins(firstCoin, [amountMicro]);
+          txb.splitCoins(firstCoin, [BigInt(amountMicro)]);
           coinRef = { $kind: 'NestedResult' as const, NestedResult: [0, 0] };
         }
         
@@ -1004,7 +1010,7 @@ export default function StakePage() {
         } else {
           // splitCoins is the first actual command (object() and sharedObjectRef() are just references, not commands)
           // So splitCoins will be at index 0
-          txb.splitCoins(firstCoin, [amountMicro]);
+          txb.splitCoins(firstCoin, [BigInt(amountMicro)]);
           coinRef = { $kind: 'NestedResult' as const, NestedResult: [0, 0] };
         }
         

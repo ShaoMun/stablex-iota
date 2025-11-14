@@ -2,6 +2,7 @@ import { useRouter } from "next/router";
 import { cn } from "@/lib/utils";
 import { ReactNode } from "react";
 import DualWalletButton from "@/components/DualWalletButton";
+import Logo from "@/components/Logo";
 
 type Tab = "stake" | "swap" | "migrate" | "unstake" | "withdraw";
 
@@ -88,17 +89,12 @@ export default function AppLayout({ children, activeTab }: AppLayoutProps) {
 
       {/* Header */}
       <div className="absolute top-0 left-0 right-0 z-20 px-8 pt-8 flex items-center justify-between">
-        <h1
-          className="text-lg font-semibold text-white cursor-pointer hover:opacity-80 transition-opacity"
-          onClick={() => router.push('/')}
-        >
-          STABLEX
-        </h1>
+        <Logo />
         <DualWalletButton />
       </div>
 
       {/* Content Column */}
-      <div className="w-full max-w-[560px] mx-auto px-4 relative z-10 pt-20">
+      <div className="w-full max-w-[560px] mx-auto px-4 relative z-10 pt-28">
         {/* Tabs Bar - stays in same position across pages */}
         <div className="flex justify-center mb-6">
           <div 

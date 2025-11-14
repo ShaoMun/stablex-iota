@@ -2,6 +2,7 @@ import { useEffect, useRef, useMemo } from "react";
 import { useRouter } from "next/router";
 import Script from "next/script";
 import { TextAnimate } from "@/components/ui/text-animate";
+import Logo from "@/components/Logo";
 
 declare global {
   namespace JSX {
@@ -192,12 +193,7 @@ export default function Home() {
 
         {/* Header */}
         <div className="absolute top-0 left-0 right-0 z-20 flex items-center justify-between p-6 md:p-8">
-          <h1
-            className="text-lg font-semibold text-white cursor-pointer hover:opacity-80 transition-opacity"
-            onClick={() => router.push('/')}
-          >
-            STABLEX
-          </h1>
+          <Logo />
           
           <button
             onClick={() => router.push('/stake')}
@@ -243,7 +239,7 @@ export default function Home() {
         <div className="absolute top-8 left-1/2 -translate-x-1/2 z-20">
           <div className="inline-flex rounded-full bg-white/5 backdrop-blur-xl border border-white/10 p-2 shadow-[0_8px_30px_rgba(0,0,0,0.35)] ring-1 ring-white/10 gap-2">
             <a
-              href="https://github.com"
+              href="https://github.com/ShaoMun/stablex-iota"
               target="_blank"
               rel="noopener noreferrer"
               className="p-2.5 rounded-full text-white hover:bg-white/10 transition-all duration-300 ease-out flex items-center justify-center group"
@@ -260,9 +256,9 @@ export default function Home() {
               </svg>
             </a>
             <a
-              href="#"
+              href="/whitepaper"
               className="p-2.5 rounded-full text-white hover:bg-white/10 transition-all duration-300 ease-out flex items-center justify-center group"
-              title="Documentation"
+              title="Whitepaper"
             >
               <svg 
                 width="20" 
@@ -280,7 +276,7 @@ export default function Home() {
               </svg>
             </a>
             <a
-              href="https://twitter.com"
+              href="https://x.com/mun336699"
               target="_blank"
               rel="noopener noreferrer"
               className="p-2.5 rounded-full text-white hover:bg-white/10 transition-all duration-300 ease-out flex items-center justify-center group"

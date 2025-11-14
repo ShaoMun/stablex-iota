@@ -2,7 +2,7 @@ import "@/styles/globals.css";
 import "@iota/dapp-kit/dist/index.css";
 import "@rainbow-me/rainbowkit/styles.css";
 import type { AppProps } from "next/app";
-import { Inter, Do_Hyeon } from "next/font/google";
+import { Inter, Do_Hyeon, Montserrat, Great_Vibes } from "next/font/google";
 import { createNetworkConfig, IotaClientProvider, WalletProvider } from "@iota/dapp-kit";
 import { getFullnodeUrl } from "@iota/iota-sdk/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -21,6 +21,20 @@ const inter = Inter({
 const doHyeon = Do_Hyeon({
   subsets: ["latin"],
   variable: "--font-dohyeon",
+  display: "swap",
+  weight: "400",
+});
+
+const montserrat = Montserrat({
+  subsets: ["latin"],
+  variable: "--font-montserrat",
+  display: "swap",
+  weight: ["400", "600", "700"],
+});
+
+const greatVibes = Great_Vibes({
+  subsets: ["latin"],
+  variable: "--font-great-vibes",
   display: "swap",
   weight: "400",
 });
@@ -106,7 +120,7 @@ export default function App({ Component, pageProps }: AppProps) {
 
   return (
     <ErrorBoundary>
-      <div className={`${inter.variable} ${doHyeon.variable}`}>
+      <div className={`${inter.variable} ${doHyeon.variable} ${montserrat.variable} ${greatVibes.variable}`}>
         <WagmiProvider config={wagmiConfig}>
           <QueryClientProvider client={queryClient}>
             <RainbowKitProvider>
