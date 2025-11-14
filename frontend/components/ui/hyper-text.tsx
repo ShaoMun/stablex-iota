@@ -180,7 +180,7 @@ export function HyperText({
             className={cn("font-mono inline-block", word.match(/^\s+$/) ? "w-3" : "")}
             initial={false}
             animate={false}
-            exit={false}
+            exit={undefined}
             style={{ transform: 'none' }}
           >
             {word.toUpperCase()}
