@@ -38,15 +38,17 @@ export async function addTokenToMetaMask(
   try {
     const wasAdded = await window.ethereum.request({
       method: "wallet_watchAsset",
-      params: {
-        type: "ERC20",
-        options: {
-          address: tokenAddress,
-          symbol: tokenSymbol,
-          decimals: tokenDecimals,
-          image: tokenImage,
+      params: [
+        {
+          type: "ERC20",
+          options: {
+            address: tokenAddress,
+            symbol: tokenSymbol,
+            decimals: tokenDecimals,
+            image: tokenImage,
+          },
         },
-      },
+      ],
     });
 
     if (wasAdded) {
