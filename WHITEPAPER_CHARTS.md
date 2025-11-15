@@ -201,5 +201,5 @@ This document outlines all the charts and diagrams needed for the StableX Whitep
 8. Cross-Chain Bridge Flow
 9. Price Feed Architecture
 
-Each chart has a placeholder in the whitepaper with detailed requirements and descriptions. Replace the placeholder divs with actual chart images or components once the charts are ready.
+Each chart has a placeholder in the whitepaper with detailed requirements and descriptions. Replace the placeholder div with actual chart images or components once the charts are ready.
 
