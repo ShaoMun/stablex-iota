@@ -1365,23 +1365,15 @@ export default function StakePage() {
         items={[
           {
             question: "What is unified APY?",
-            answer: "All depositors earn the same APY, which is higher than staking USDC alone. This unified APY comes from swap fees and market making returns, shared by everyone in the pool."
+            answer: "All depositors earn the same unified APY, which is higher than staking USDC alone. This APY comes from two sources: swap fees (from trading activity) and market making returns (when the pool is balanced). Everyone shares this yield equally, regardless of which currency they deposited—this is the key advantage over traditional single-currency staking."
           },
           {
             question: "What is SBX token?",
-            answer: "SBX is your staking receipt. 1 SBX = 1 USDC. When you stake, you get SBX tokens representing your share. Your SBX amount grows automatically as you earn yield."
+            answer: "SBX is your staking receipt token. 1 SBX = 1 USD value. When you stake, you receive SBX tokens equal to your deposit's USD value (after a 0.1% deposit fee). Your SBX tokens represent your share of the pool and can be used to unstake or withdraw funds at any time."
           },
           {
             question: "Can I deposit any stablecoin?",
-            answer: "Yes! Deposit USDC, CHFX, TRYB, or SEKX. All go into the same pool and earn the same APY. Your deposit converts to SBX tokens at 1:1 USDC value."
-          },
-          {
-            question: "How does the unified yield work?",
-            answer: "Yield comes from two sources: swap fees and market making. Everyone shares this yield equally, so you get higher returns than staking USDC by itself."
-          },
-          {
-            question: "What happens when I stake?",
-            answer: "Your stablecoins go into the unified pool. You receive SBX tokens equal to your deposit's USD value. Your SBX balance grows over time as you earn yield."
+            answer: "Yes! You can deposit USDC, CHFX, TRYB, or SEKX. All currencies go into the same unified pool and earn the same unified APY. Your deposit is converted to SBX tokens at 1:1 USD value (after fees), regardless of which currency you use."
           }
         ]}
       />

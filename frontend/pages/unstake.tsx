@@ -710,24 +710,16 @@ export default function UnstakePage() {
       <FAQ
         items={[
           {
-            question: "What are asymmetric withdrawal rules?",
-            answer: "Different rules for different depositors: If you deposited regional coins (CHFX, TRYB, SEKX), you can withdraw any regional coin OR USDC. If you deposited USDC, you can only withdraw regional coins, not USDC. This keeps the pool balanced."
+            question: "What is the difference between Unstake and Withdraw?",
+            answer: "Unstake removes your position from the pool—you stop earning rewards. Withdraw (only for regional stakers) keeps your position active—you continue earning rewards. Use unstake when you want to fully exit the pool; use withdraw when you want liquidity while keeping your position."
           },
           {
-            question: "Can I withdraw USDC?",
-            answer: "Only if you originally deposited regional stablecoins. If you deposited USDC, you cannot withdraw USDC—only regional coins. This prevents circular staking and maintains pool balance."
+            question: "What are the unstake rules?",
+            answer: "To unstake, you need both your staking status (cap) and SBX tokens. If you staked USDC, you can unstake to USDC or any regional currency (CHFX, TRYB, SEKX). If you staked a regional currency, you can only unstake to that specific currency—not USDC or other regionals. This maintains pool balance and prevents circular staking."
           },
           {
-            question: "What fees apply to withdrawals?",
-            answer: "Fees depend on pool depth: healthy pools pay 0.3% fee by default, while unhealthy pools (low liquidity) pay higher fees (up to 50%) to protect liquidity."
-          },
-          {
-            question: "How do I unlock my liquidity?",
-            answer: "Unstake your SBX tokens to get your funds back. You'll receive the USD value in your chosen currency (following withdrawal rules). The amount depends on current pool depth and fees."
-          },
-          {
-            question: "Why can't USDC depositors withdraw USDC?",
-            answer: "This prevents people from staking USDC, earning yield, then immediately withdrawing USDC. USDC depositors get higher APY as compensation, while regional depositors get the benefit of USDC withdrawal."
+            question: "What fees apply to unstaking?",
+            answer: "Fees depend on pool health: Healthy pools pay 0.3% (30 basis points). Unhealthy pools (>70% utilized or >30% withdrawal) pay 40-50% to protect liquidity. This dynamic fee structure protects the pool during low liquidity periods."
           }
         ]}
       />

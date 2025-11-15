@@ -788,27 +788,15 @@ export default function MigratePage() {
         items={[
           {
             question: "What is account migration?",
-            answer: "Move your staking from one account to another. You can migrate a specific currency (USDC, CHFX, TRYB, or SEKX) to a new account for a recipient address."
+            answer: "Transfer your staking status for a specific currency to another address. This creates a new account for the recipient with the migrated staking status. You can migrate individual currencies (USDC, CHFX, TRYB, or SEKX) one at a time, and optionally send SBX tokens along with it."
           },
           {
             question: "Why would I migrate my staking status?",
-            answer: "Useful if you want to transfer specific staked currencies to another wallet, reorganize your staking, or split your staking across multiple accounts. After migration, the recipient can unstake using their SBX tokens."
+            answer: "Useful for transferring staked currencies to another wallet, reorganizing staking across multiple accounts, or gifting staking positions to others. The recipient can then unstake using their SBX tokens following the same withdrawal rules."
           },
           {
             question: "How does migration work?",
-            answer: "Only you (the account owner) can start migration. Select a currency to migrate, and optionally send associated SBX tokens. The destination account will be created automatically for the recipient address. Only the selected currency's staked amount is migrated."
-          },
-          {
-            question: "What happens after migration?",
-            answer: "The new account gets the selected currency's staking status and can unstake using SBX tokens. Your original account's staking for that currency is cleared, but other currencies remain untouched."
-          },
-          {
-            question: "Can I migrate partial amounts?",
-            answer: "Yes! You can migrate individual currencies. Select which currency (USDC, CHFX, TRYB, or SEKX) you want to migrate. Only that currency's staked amount will be transferred to the recipient."
-          },
-          {
-            question: "What if I also send SBX?",
-            answer: "If you enable 'Also Send SBX', you can transfer SBX tokens along with the staking status. The recipient will be able to unstake immediately if they receive the corresponding SBX tokens."
+            answer: "Select which currency to migrate and optionally send associated SBX tokens. A new account is created for the recipient with only that currency's staking status. Your original account's staking for that currency is cleared, but other currencies remain untouched."
           }
         ]}
       />

@@ -730,23 +730,15 @@ export default function WithdrawPage() {
         items={[
           {
             question: "What is the difference between Withdraw and Unstake?",
-            answer: "Withdraw is a simplified interface for converting SBX to USDC. Unstake allows you to choose from multiple currencies (USDC, CHFX, TRYB, SEKX) based on your staking history."
+            answer: "Withdraw (only for regional stakers) keeps your position in the pool—you continue earning rewards. Unstake removes your position—you stop earning rewards. Withdraw is designed to encourage regional staking by providing liquidity while still earning yield."
           },
           {
-            question: "Can I withdraw USDC?",
-            answer: "Yes, the Withdraw page allows you to convert SBX directly to USDC. This is useful for users who want a straightforward SBX to USDC conversion."
+            question: "What is double yield?",
+            answer: "Double yield is the key benefit of withdraw: You can withdraw regional currencies (getting liquidity), then restake them to earn yield again. Since your original position remains in the pool earning rewards, you effectively earn yield on both positions—this is the unique advantage for regional stakers."
           },
           {
-            question: "What fees apply to withdrawals?",
-            answer: "Fees depend on pool depth: healthy pools pay 0.3% fee by default, while unhealthy pools (low liquidity) pay higher fees (up to 50%) to protect liquidity."
-          },
-          {
-            question: "How do I withdraw my SBX?",
-            answer: "Enter the amount of SBX you want to withdraw, and you'll receive the equivalent value in USDC (minus fees). The amount depends on current pool depth and fees."
-          },
-          {
-            question: "Why use Withdraw instead of Unstake?",
-            answer: "Withdraw provides a simpler, streamlined experience for SBX to USDC conversion. If you need to withdraw to other currencies or have specific staking requirements, use the Unstake page instead."
+            question: "Who can use Withdraw?",
+            answer: "Withdraw is only available for regional stakers who originally staked CHFX, TRYB, or SEKX. USDC stakers cannot use withdraw—they must use unstake instead. This design encourages regional currency staking by providing this additional benefit."
           }
         ]}
       />

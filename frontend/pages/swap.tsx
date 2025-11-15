@@ -864,23 +864,15 @@ export default function SwapPage() {
         items={[
           {
             question: "How do direct swaps work?",
-            answer: "Swap one stablecoin for another directly (e.g., CHFX to TRYB) without converting to USD first. The rate is based on current prices, and one fee applies based on how much liquidity is available."
-          },
-          {
-            question: "Why no USD intermediate?",
-            answer: "Skipping USD saves fees and time. All currencies are in one pool, so you can swap directly between any two stablecoins instantly."
+            answer: "Swap one stablecoin for another directly (e.g., CHFX to TRYB) without converting to USD first. This saves fees and time—you pay one fee instead of two. The exchange rate uses real-time prices, and a depth penalty may apply if the target currency is scarce to protect pool liquidity."
           },
           {
             question: "What are the swap fees?",
-            answer: "Fees depend on pool depth: healthy pools (≥80%) pay low fees (~0.07%), medium pools (30-80%) pay moderate fees (0.07-0.32%), and low pools (<30%) pay high fees (up to 14%+) to protect liquidity."
+            answer: "Fees depend on pool health: Healthy pools pay 0.05% (5 basis points). Unhealthy pools (>70% utilized or >30% withdrawal) pay 40-50% to protect liquidity. This dynamic fee structure ensures the pool remains stable even during high demand periods."
           },
           {
             question: "Can I swap between any currencies?",
-            answer: "Yes! Swap directly between CHFX, TRYB, and SEKX. Rates use real-time prices from our API, so you get accurate exchange rates instantly."
-          },
-          {
-            question: "How are prices determined?",
-            answer: "Prices come from external APIs and are passed to the swap. This keeps gas costs low and transactions fast compared to checking prices on-chain."
+            answer: "Yes! You can swap directly between CHFX, TRYB, and SEKX. USDC is not available for swaps—it's reserved for staking and unstaking. Exchange rates use real-time prices from external APIs for accurate market rates."
           }
         ]}
       />
