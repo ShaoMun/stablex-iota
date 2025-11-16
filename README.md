@@ -1,6 +1,6 @@
 # StableX - Cross-Chain Stablecoin Exchange on IOTA
 
-> A cross-chain stablecoin exchange platform built on IOTA, supporting both IOTA L1 (Move) and IOTA EVM (Solidity). Inspired by Sanctum's infinity pool concept, the exchange addresses fragmented liquidity for regional stablecoins by allowing users to deposit USDC or regional stablecoins, earn unified yield, and receive SBX tokens that can be withdrawn as any currency (with asymmetric withdrawal rules).
+> A cross-chain stablecoin exchange platform built on IOTA, supporting both IOTA L1 (Move) and IOTA EVM (Solidity). The exchange addresses fragmented liquidity for regional stablecoins by allowing users to deposit USDC or regional stablecoins, earn unified yield, and receive SBX tokens that can be withdrawn as any currency (with asymmetric withdrawal rules).
 
 ---
 
@@ -12,6 +12,7 @@
 - [Quick Start](#quick-start)
 - [Network & Deployment](#network--deployment)
 - [Development Status](#development-status)
+- [Future Enhancements](#-future-enhancements)
 - [Dependencies](#dependencies)
 - [References](#references)
 
@@ -410,6 +411,111 @@ npm run start
 - ✅ Direct A→B swaps (no USD intermediate)
 - ✅ Multi-wallet frontend integration
 - ✅ Bridge relayer service
+
+---
+
+## 🚀 Future Enhancements
+
+### 1. Additional Regional Stablecoins
+
+Expand support to more regional currencies to increase global accessibility and liquidity:
+
+- **Target Currencies**: JPYX (Japanese Yen), GBPX (British Pound), AUDX (Australian Dollar), CADX (Canadian Dollar), and more
+- **Enhanced Multi-Currency Pools**: Support for 10+ regional stablecoins in unified liquidity pool
+- **Regional Market Features**: Currency-specific features tailored to local market needs
+- **Regulatory Compliance**: Ensure each currency meets regional regulatory requirements
+
+**Implementation Requirements:**
+- New token modules (Move) and ERC-20 contracts (EVM)
+- Price feed integration for new currency pairs
+- Frontend updates for currency selection and swaps
+- Extended fee tracking and allocation logic per currency
+
+---
+
+### 2. Enhanced Yield Strategies
+
+Implement automated yield generation across multiple DeFi protocols:
+
+- **Automated Yield Farming**: Integrate with lending protocols, DEXs, and yield aggregators
+- **Multi-Strategy Vault**: Allocate funds across multiple strategies based on risk/return profiles
+- **Auto-Compounding**: Automatically reinvest yields to maximize returns
+- **Strategy Performance Tracking**: Real-time APY tracking per strategy with historical analytics
+- **Risk Management**: Slippage controls, impermanent loss protection, and strategy rebalancing
+
+**Potential Integrations:**
+- Lending protocols (Aave, Compound-style)
+- Liquidity provision on DEXs
+- Staking rewards on other chains
+- Cross-chain yield opportunities
+
+---
+
+### 3. Improved Drain Prevention Mechanism
+
+Enhance the current fee-based protection with multi-layered security:
+
+#### Current System
+- Two-tier fee structure: 5 bps base, 40-50% high fees when pool >70% utilized or withdrawal >30%
+
+#### Planned Improvements
+
+**Three-Tier Fee Curve (80%/30% Thresholds):**
+- **Tier 1 (≥80% coverage)**: Fixed 7 bps (0.07%) - optimal for healthy pools
+- **Tier 2 (30-80% coverage)**: Linear scaling 7-32 bps - gradual fee increase
+- **Tier 3 (<30% coverage)**: Exponential fees with no cap (up to 14%+) - strong deterrent
+
+**Additional Protection Mechanisms:**
+- **Time-Based Limits**: Cooldown periods for large withdrawals
+- **Rate Limiting**: Maximum withdrawal amounts per time window
+- **Circuit Breakers**: Automatic pause mechanism if pool drops below critical threshold
+- **Dynamic Thresholds**: Adaptive fee thresholds based on historical patterns
+- **Multi-Factor Analysis**: Combine depth, velocity, and time-based metrics
+- **Flash Loan Attack Prevention**: Detect and prevent arbitrage-based drain attempts
+
+**Benefits:**
+- More granular protection at different pool health levels
+- Better user experience for normal operations (lower fees when healthy)
+- Stronger protection against coordinated attacks
+- Per-currency depth tracking for precise fee calculation
+
+---
+
+### 4. Payment/Offramp Protocol Integration
+
+Enable real-world usage through partnerships with payment processors and offramp services:
+
+#### Payment Processor Integration
+- **Merchant Acceptance**: Enable businesses to accept regional stablecoins as payment
+- **Point-of-Sale Integration**: Connect with payment terminals and e-commerce platforms
+- **API Endpoints**: Provide payment APIs for third-party integrations
+- **Settlement Mechanisms**: Fast, low-cost settlement for merchants
+
+#### Offramp Services
+- **Fiat Conversion**: Convert SBX and regional stablecoins to local fiat currencies
+- **Bank Transfers**: Direct bank account integration for withdrawals
+- **Card Issuance**: Debit/credit cards linked to SBX balances
+- **ATM Network**: Physical access to funds via ATM networks
+
+#### Remittance & B2B Services
+- **Cross-Border Payments**: Low-cost international remittances
+- **Corporate Treasury**: B2B payment solutions for businesses
+- **Multi-Currency Wallets**: Support for businesses operating in multiple regions
+
+**Technical Requirements:**
+- Webhook system for payment notifications
+- KYC/AML compliance integration
+- Fiat on/off-ramp smart contracts
+- Multi-signature security for large transactions
+- Transaction monitoring and fraud detection
+- Compliance reporting and audit trails
+
+**Partnership Opportunities:**
+- Payment processors (Stripe, PayPal-style integrations)
+- Offramp providers (MoonPay, Ramp-style services)
+- Card issuers (Visa, Mastercard partnerships)
+- Remittance services (Western Union, MoneyGram-style)
+- Banking partners for fiat integration
 
 ---
 
