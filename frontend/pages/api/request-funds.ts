@@ -17,8 +17,8 @@ const SENDER_PUBLIC_KEY = process.env.SENDER_PUBLIC_KEY || '';
 const PACKAGE_ID = '0x1cf79de8cac02b52fa384df41e7712b5bfadeae2d097a818008780cf7d7783c6';
 
 // Amounts in micro-units (6 decimals)
-// 2000 tokens = 2,000,000,000 micro-units (2000 * 1,000,000)
-const TOKEN_AMOUNT = 2_000_000_000; // 2000 tokens (2000 * 1,000,000)
+// 10 tokens = 10,000,000 micro-units (10 * 1,000,000)
+const TOKEN_AMOUNT = 10_000_000; // 10 tokens (10 * 1,000,000)
 
 export default async function handler(
   req: NextApiRequest,
