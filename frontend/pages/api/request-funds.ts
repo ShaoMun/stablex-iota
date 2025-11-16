@@ -5,16 +5,20 @@ import { Ed25519Keypair } from '@iota/iota-sdk/keypairs/ed25519';
 import { fromB64 } from '@iota/iota-sdk/utils';
 import { bech32 } from 'bech32';
 
-// Private key for the sender wallet (bech32 encoded)
-const SENDER_PRIVATE_KEY = 'iotaprivkey1qq9krr4gw807s9x2nqe487m3ysvu5x4znqlgeff82g4tgcv66dravh99m0k';
-const SENDER_PUBLIC_KEY = '0xd4655ee4e9f16da4be0342c9e8e3729478be385c26caf43ec5e5a049198cb1a2';
+// Private key and public key for the sender wallet (from environment variables)
+// Required environment variables:
+//   SENDER_PRIVATE_KEY - IOTA private key in bech32 format (e.g., iotaprivkey1...)
+//   SENDER_PUBLIC_KEY - IOTA wallet address (e.g., 0x...)
+// Add these to your .env.local file in the frontend directory
+const SENDER_PRIVATE_KEY = process.env.SENDER_PRIVATE_KEY || '';
+const SENDER_PUBLIC_KEY = process.env.SENDER_PUBLIC_KEY || '';
 
 // Package ID
 const PACKAGE_ID = '0x1cf79de8cac02b52fa384df41e7712b5bfadeae2d097a818008780cf7d7783c6';
 
 // Amounts in micro-units (6 decimals)
-// 10 tokens = 10,000,000 micro-units (10 * 1,000,000)
-const TOKEN_AMOUNT = 10_000_000; // 10 tokens (10 * 1,000,000)
+// 2000 tokens = 2,000,000,000 micro-units (2000 * 1,000,000)
+const TOKEN_AMOUNT = 2_000_000_000; // 2000 tokens (2000 * 1,000,000)
 
 export default async function handler(
   req: NextApiRequest,
@@ -29,6 +33,15 @@ export default async function handler(
 
     if (!recipientAddress) {
       return res.status(400).json({ error: 'Missing recipientAddress' });
+    }
+
+    // Validate environment variables
+    if (!SENDER_PRIVATE_KEY) {
+      return res.status(500).json({ error: 'SENDER_PRIVATE_KEY environment variable is not set' });
+    }
+
+    if (!SENDER_PUBLIC_KEY) {
+      return res.status(500).json({ error: 'SENDER_PUBLIC_KEY environment variable is not set' });
     }
 
     // Initialize IOTA client
