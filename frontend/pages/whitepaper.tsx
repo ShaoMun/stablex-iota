@@ -25,24 +25,14 @@ interface Section {
 const sections: Section[] = [
   { id: "overview", title: "Overview" },
   { 
-    id: "architecture", 
-    title: "Architecture",
-    subsections: ["System Overview", "Component Diagram", "Data Flow"]
-  },
-  { 
-    id: "multi-chain", 
-    title: "Multi-Chain Architecture",
-    subsections: ["L1 Components", "EVM Components", "Unified Liquidity"]
-  },
-  { 
     id: "pool-mechanics", 
     title: "Pool Mechanics",
     subsections: ["Unified Basket", "SBX Token", "Asymmetric Withdrawal", "Unified APY"]
   },
   { 
-    id: "fee-structure", 
-    title: "Fee Structure",
-    subsections: ["Three-Tier System", "Fee Calculation", "Dynamic Pricing"]
+    id: "price-feeds", 
+    title: "Price Feed Architecture",
+    subsections: ["API Integration", "Price Format", "Off-Chain Queries"]
   },
   { 
     id: "swapping", 
@@ -50,14 +40,24 @@ const sections: Section[] = [
     subsections: ["Direct A→B Swaps", "Rate Calculation", "Infinity Pool"]
   },
   { 
+    id: "fee-structure", 
+    title: "Fee Structure",
+    subsections: ["Three-Tier System", "Fee Calculation", "Dynamic Pricing"]
+  },
+  { 
+    id: "architecture", 
+    title: "Architecture",
+    subsections: ["System Overview", "Component Diagram", "Data Flow"]
+  },
+  { 
     id: "bridging", 
     title: "Cross-Chain Bridge",
     subsections: ["Bridge Flow", "Lock/Mint", "Burn/Unlock", "Relayer"]
   },
   { 
-    id: "price-feeds", 
-    title: "Price Feed Architecture",
-    subsections: ["API Integration", "Price Format", "Off-Chain Queries"]
+    id: "multi-chain", 
+    title: "Multi-Chain Architecture",
+    subsections: ["L1 Components", "EVM Components", "Unified Liquidity"]
   },
   { 
     id: "security", 
@@ -95,14 +95,40 @@ export default function Whitepaper() {
   }, [router.asPath]);
 
   useEffect(() => {
-    // Set date only on client to avoid hydration mismatch
-    // Use ISO format for consistency across locales
-    const date = new Date();
-    setCurrentDate(date.toLocaleDateString('en-US', { 
-      year: 'numeric', 
-      month: 'long', 
-      day: 'numeric' 
-    }));
+    // Set current date and time in CET timezone
+    // CET is UTC+1 (CEST is UTC+2 during daylight saving, typically March-October)
+    const now = new Date();
+    
+    // Get date/time in Europe/Berlin timezone (CET/CEST)
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Europe/Berlin',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    });
+    
+    const parts = formatter.formatToParts(now);
+    const month = parts.find(p => p.type === 'month')?.value;
+    const day = parts.find(p => p.type === 'day')?.value;
+    const year = parts.find(p => p.type === 'year')?.value;
+    const hour = parts.find(p => p.type === 'hour')?.value;
+    const minute = parts.find(p => p.type === 'minute')?.value;
+    
+    // Determine if DST is active (CEST) by comparing UTC and Berlin time
+    // CET is UTC+1, CEST is UTC+2
+    const utcHours = now.getUTCHours();
+    const berlinHours = parseInt(hour || '0', 10);
+    let offsetHours = berlinHours - utcHours;
+    // Handle day boundary cases (offset can be negative if crossing midnight)
+    if (offsetHours > 12) offsetHours -= 24;
+    if (offsetHours < -12) offsetHours += 24;
+    const timezone = offsetHours === 2 ? 'CEST' : 'CET';
+    
+    const dateString = `${month} ${day}, ${year}, ${hour}:${minute} ${timezone}`;
+    setCurrentDate(dateString);
 
     // Load theme preference from localStorage
     const savedTheme = localStorage.getItem('whitepaper-theme');
@@ -480,7 +506,7 @@ export default function Whitepaper() {
                 "mt-4 text-sm",
                 isDarkMode ? "text-zinc-500" : "text-gray-500"
               )}>
-                Version 1.0 | Last Updated: {currentDate || "Loading..."}
+                Version 1.0 | Last Updated: {currentDate}
               </div>
             </div>
 
@@ -574,6 +600,885 @@ export default function Whitepaper() {
                       )}>
                         Regional depositors can withdraw USDC or regionals; USDC depositors can only withdraw regionals.
                       </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            {/* Pool Mechanics Section */}
+            <section id="pool-mechanics" className="mb-16 scroll-mt-28">
+              <div className={sectionCardClass()}>
+                <h2 className={headingClass()}>Pool Mechanics</h2>
+                
+                <div className="mb-8">
+                  <h3 className={subHeadingClass()}>Unified Basket</h3>
+                  <p className={textClass()}>
+                    All currencies (USDC + CHFX + TRYB + SEKX) exist in one unified pool. This creates deep liquidity 
+                    for all trading pairs and allows for direct swaps between any two currencies without intermediate steps.
+                  </p>
+                </div>
+
+                <div className="mb-8">
+                  <h3 className={subHeadingClass()}>SBX Token</h3>
+                  <p className={textClass()}>
+                    When users deposit into the pool, they receive SBX tokens at a 1:1 ratio with USD value. 
+                    SBX tokens represent a share of the entire pool and can be withdrawn as any supported currency 
+                    (subject to asymmetric withdrawal rules).
+                  </p>
+                </div>
+
+                <div className="mb-8">
+                  <h3 className={subHeadingClass()}>Asymmetric Withdrawal</h3>
+                  <p className={textClass()}>
+                    To maintain pool balance and incentivize regional stablecoin deposits:
+                  </p>
+                  <ul className={listTextClass()}>
+                    <li>• <strong className={strongClass()}>Regional depositors:</strong> Can withdraw any regional stablecoin OR USDC</li>
+                    <li>• <strong className={strongClass()}>USDC depositors:</strong> Can only withdraw regional stablecoins (cannot withdraw USDC)</li>
+                  </ul>
+                </div>
+
+                <div className="mb-8">
+                  <h3 className={subHeadingClass()}>Unified APY</h3>
+                  <p className={textClass()}>
+                    All depositors earn the same APY regardless of which currency they deposit. This APY is typically 
+                    higher than what USDC alone would provide, as it represents a weighted average of yields from all 
+                    currencies in the pool.
+                  </p>
+                  
+                  {/* Chart 5: Pool Architecture */}
+                  <div className="mb-6">
+                    <h4 className={chartTitleClass()}>Chart 5: Pool Architecture</h4>
+                    <div className={cn(
+                      "rounded-lg p-4 border overflow-x-auto",
+                      isDarkMode 
+                        ? "bg-black/40 border-white/20"
+                        : "bg-gray-50 border-gray-300"
+                    )}>
+                      <svg viewBox="0 0 900 700" className="w-full h-auto">
+                        {/* Central Pool */}
+                        <circle cx="450" cy="350" r="120"
+                          fill={isDarkMode ? "rgba(75, 20, 120, 0.3)" : "rgba(139, 92, 246, 0.15)"}
+                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.7)" : "rgba(139, 92, 246, 0.5)"}
+                          strokeWidth="3"/>
+                        <text x="450" y="330" textAnchor="middle"
+                          fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="16" fontWeight="bold">Unified Pool</text>
+                        <text x="450" y="350" textAnchor="middle"
+                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="12">Unified Basket</text>
+                        <text x="450" y="370" textAnchor="middle"
+                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="11">All Currencies</text>
+                        <text x="450" y="390" textAnchor="middle"
+                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">USDC + CHFX + TRYB + SEKX</text>
+                        
+                        {/* Currency Nodes */}
+                        {/* USDC */}
+                        <circle cx="450" cy="150" r="50"
+                          fill={isDarkMode ? "rgba(139, 92, 246, 0.25)" : "rgba(139, 92, 246, 0.12)"}
+                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.6)" : "rgba(139, 92, 246, 0.4)"}
+                          strokeWidth="2"/>
+                        <text x="450" y="155" textAnchor="middle"
+                          fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="14" fontWeight="bold">USDC</text>
+                        
+                        {/* CHFX */}
+                        <circle cx="200" cy="350" r="50"
+                          fill={isDarkMode ? "rgba(139, 92, 246, 0.25)" : "rgba(139, 92, 246, 0.12)"}
+                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.6)" : "rgba(139, 92, 246, 0.4)"}
+                          strokeWidth="2"/>
+                        <text x="200" y="355" textAnchor="middle"
+                          fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="14" fontWeight="bold">CHFX</text>
+                        
+                        {/* TRYB */}
+                        <circle cx="450" cy="550" r="50"
+                          fill={isDarkMode ? "rgba(139, 92, 246, 0.25)" : "rgba(139, 92, 246, 0.12)"}
+                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.6)" : "rgba(139, 92, 246, 0.4)"}
+                          strokeWidth="2"/>
+                        <text x="450" y="555" textAnchor="middle"
+                          fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="14" fontWeight="bold">TRYB</text>
+                        
+                        {/* SEKX */}
+                        <circle cx="700" cy="350" r="50"
+                          fill={isDarkMode ? "rgba(139, 92, 246, 0.25)" : "rgba(139, 92, 246, 0.12)"}
+                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.6)" : "rgba(139, 92, 246, 0.4)"}
+                          strokeWidth="2"/>
+                        <text x="700" y="355" textAnchor="middle"
+                          fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="14" fontWeight="bold">SEKX</text>
+                        
+                        {/* SBX Token */}
+                        <rect x="380" y="250" width="140" height="60" rx="8"
+                          fill={isDarkMode ? "rgba(88, 28, 135, 0.4)" : "rgba(139, 92, 246, 0.2)"}
+                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.8)" : "rgba(139, 92, 246, 0.6)"}
+                          strokeWidth="2.5"/>
+                        <text x="450" y="275" textAnchor="middle"
+                          fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="14" fontWeight="bold">SBX Token</text>
+                        <text x="450" y="295" textAnchor="middle"
+                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="11">1 SBX = 1 USD</text>
+                        
+                        {/* User Deposit */}
+                        <rect x="50" y="300" width="100" height="60" rx="8"
+                          fill={isDarkMode ? "rgba(139, 92, 246, 0.2)" : "rgba(139, 92, 246, 0.1)"}
+                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.5)" : "rgba(139, 92, 246, 0.3)"}
+                          strokeWidth="2"/>
+                        <text x="100" y="325" textAnchor="middle"
+                          fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="12" fontWeight="bold">User</text>
+                        <text x="100" y="345" textAnchor="middle"
+                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">Deposit</text>
+                        
+                        {/* User Withdrawal */}
+                        <rect x="750" y="300" width="100" height="60" rx="8"
+                          fill={isDarkMode ? "rgba(139, 92, 246, 0.2)" : "rgba(139, 92, 246, 0.1)"}
+                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.5)" : "rgba(139, 92, 246, 0.3)"}
+                          strokeWidth="2"/>
+                        <text x="800" y="325" textAnchor="middle"
+                          fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="12" fontWeight="bold">User</text>
+                        <text x="800" y="345" textAnchor="middle"
+                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">Withdraw</text>
+                        
+                        {/* Arrows - Deposit Flow */}
+                        <path d="M 150 330 L 330 350" 
+                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.6)" : "rgba(139, 92, 246, 0.5)"}
+                          strokeWidth="2.5" fill="none" markerEnd="url(#arrowhead)"/>
+                        <text x="240" y="335" textAnchor="middle"
+                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">Deposit</text>
+                        
+                        <path d="M 450 330 L 450 310" 
+                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.6)" : "rgba(139, 92, 246, 0.5)"}
+                          strokeWidth="2.5" fill="none" markerEnd="url(#arrowhead)"/>
+                        <text x="470" y="315" textAnchor="start"
+                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">Mint SBX</text>
+                        
+                        {/* Arrows - Withdrawal Flow */}
+                        <path d="M 570 350 L 750 330" 
+                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.6)" : "rgba(139, 92, 246, 0.5)"}
+                          strokeWidth="2.5" fill="none" markerEnd="url(#arrowhead)"/>
+                        <text x="660" y="335" textAnchor="middle"
+                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">Withdraw</text>
+                        
+                        <path d="M 450 370 L 450 390" 
+                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.6)" : "rgba(139, 92, 246, 0.5)"}
+                          strokeWidth="2.5" fill="none" markerEnd="url(#arrowhead)"/>
+                        <text x="470" y="385" textAnchor="start"
+                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">Burn SBX</text>
+                        
+                        {/* Connections from currencies to pool */}
+                        <path d="M 450 200 L 450 230" 
+                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.4)" : "rgba(139, 92, 246, 0.3)"}
+                          strokeWidth="2" fill="none"/>
+                        <path d="M 250 350 L 330 350" 
+                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.4)" : "rgba(139, 92, 246, 0.3)"}
+                          strokeWidth="2" fill="none"/>
+                        <path d="M 450 500 L 450 470" 
+                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.4)" : "rgba(139, 92, 246, 0.3)"}
+                          strokeWidth="2" fill="none"/>
+                        <path d="M 650 350 L 570 350" 
+                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.4)" : "rgba(139, 92, 246, 0.3)"}
+                          strokeWidth="2" fill="none"/>
+                        
+                        {/* Asymmetric Withdrawal Rules */}
+                        <rect x="50" y="600" width="400" height="80" rx="8"
+                          fill={isDarkMode ? "rgba(88, 28, 135, 0.2)" : "rgba(139, 92, 246, 0.1)"}
+                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.5)" : "rgba(139, 92, 246, 0.3)"}
+                          strokeWidth="2"/>
+                        <text x="250" y="625" textAnchor="middle"
+                          fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="13" fontWeight="bold">Asymmetric Withdrawal Rules</text>
+                        <text x="70" y="650" textAnchor="start"
+                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="11">• Regional depositors: Can withdraw any regional OR USDC</text>
+                        <text x="70" y="670" textAnchor="start"
+                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="11">• USDC depositors: Can only withdraw regional stablecoins</text>
+                        
+                        {/* Unified APY */}
+                        <rect x="450" y="600" width="400" height="80" rx="8"
+                          fill={isDarkMode ? "rgba(88, 28, 135, 0.2)" : "rgba(139, 92, 246, 0.1)"}
+                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.5)" : "rgba(139, 92, 246, 0.3)"}
+                          strokeWidth="2"/>
+                        <text x="650" y="625" textAnchor="middle"
+                          fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="13" fontWeight="bold">Unified APY</text>
+                        <text x="470" y="650" textAnchor="start"
+                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="11">• All depositors earn same APY</text>
+                        <text x="470" y="670" textAnchor="start"
+                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="11">• Weighted average of all currency yields</text>
+                        
+                        {/* Arrow marker */}
+                        <defs>
+                          <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+                            <polygon points="0 0, 10 3, 0 6" 
+                              fill={isDarkMode ? "rgba(139, 92, 246, 0.7)" : "rgba(139, 92, 246, 0.5)"}/>
+                          </marker>
+                        </defs>
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            {/* Price Feed Architecture Section */}
+            <section id="price-feeds" className="mb-16 scroll-mt-28">
+              <div className={sectionCardClass()}>
+                <h2 className={headingClass()}>Price Feed Architecture</h2>
+                
+                <div className="mb-8">
+                  <h3 className={subHeadingClass()}>API-Based Price Feeds</h3>
+                  <p className={textClass()}>
+                    Prices are queried off-chain via API and passed as parameters to contract functions. This approach 
+                    provides better flexibility and lower gas costs compared to on-chain oracle queries.
+                  </p>
+                  <ul className={listTextClass()}>
+                    <li>• <strong className={strongClass()}>No Onchain Queries:</strong> Removed dependency on Pyth Network onchain queries</li>
+                    <li>• <strong className={strongClass()}>Price Format:</strong> All prices in micro-USD (1e6 = $1.00)</li>
+                    <li>• <strong className={strongClass()}>Off-Chain Queries:</strong> Frontend queries API before submitting transactions</li>
+                    <li>• <strong className={strongClass()}>Parameter Passing:</strong> Prices passed as function parameters</li>
+                  </ul>
+                  
+                  {/* Chart 9: Price Feed Architecture */}
+                  <div className="mb-6">
+                    <h4 className={chartTitleClass()}>Chart 9: Price Feed Architecture</h4>
+                    <div className={cn(
+                      "rounded-lg p-4 border overflow-x-auto",
+                      isDarkMode 
+                        ? "bg-black/40 border-white/20"
+                        : "bg-gray-50 border-gray-300"
+                    )}>
+                      <svg viewBox="0 0 900 600" className="w-full h-auto">
+                        {/* Price API */}
+                        <rect x="50" y="50" width="200" height="100" rx="10"
+                          fill={isDarkMode ? "rgba(139, 92, 246, 0.25)" : "rgba(139, 92, 246, 0.12)"}
+                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.7)" : "rgba(139, 92, 246, 0.5)"}
+                          strokeWidth="3"/>
+                        <text x="150" y="80" textAnchor="middle"
+                          fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="15" fontWeight="bold">Price Feed API</text>
+                        <text x="150" y="105" textAnchor="middle"
+                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="11">Off-Chain Service</text>
+                        <text x="150" y="125" textAnchor="middle"
+                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">External Data Source</text>
+                        <text x="150" y="140" textAnchor="middle"
+                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="9">Real-time prices</text>
+                        
+                        {/* Frontend */}
+                        <rect x="350" y="50" width="200" height="150" rx="10"
+                          fill={isDarkMode ? "rgba(75, 20, 120, 0.3)" : "rgba(139, 92, 246, 0.15)"}
+                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.7)" : "rgba(139, 92, 246, 0.5)"}
+                          strokeWidth="3"/>
+                        <text x="450" y="80" textAnchor="middle"
+                          fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="15" fontWeight="bold">Frontend</text>
+                        <text x="450" y="105" textAnchor="middle"
+                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="11">User Interface</text>
+                        
+                        {/* Price Fetching Box */}
+                        <rect x="370" y="120" width="160" height="50" rx="6"
+                          fill={isDarkMode ? "rgba(139, 92, 246, 0.2)" : "rgba(139, 92, 246, 0.1)"}
+                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.5)" : "rgba(139, 92, 246, 0.3)"}
+                          strokeWidth="1.5"/>
+                        <text x="450" y="140" textAnchor="middle"
+                          fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="10" fontWeight="bold">Price Fetching</text>
+                        <text x="450" y="160" textAnchor="middle"
+                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="9">HTTP GET request</text>
+                        
+                        {/* Price Format Box */}
+                        <rect x="370" y="180" width="160" height="50" rx="6"
+                          fill={isDarkMode ? "rgba(139, 92, 246, 0.2)" : "rgba(139, 92, 246, 0.1)"}
+                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.5)" : "rgba(139, 92, 246, 0.3)"}
+                          strokeWidth="1.5"/>
+                        <text x="450" y="200" textAnchor="middle"
+                          fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="10" fontWeight="bold">Format Conversion</text>
+                        <text x="450" y="220" textAnchor="middle"
+                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="9">Convert to micro-USD</text>
+                        
+                        {/* Smart Contract */}
+                        <rect x="650" y="50" width="200" height="150" rx="10"
+                          fill={isDarkMode ? "rgba(75, 20, 120, 0.3)" : "rgba(139, 92, 246, 0.15)"}
+                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.7)" : "rgba(139, 92, 246, 0.5)"}
+                          strokeWidth="3"/>
+                        <text x="750" y="80" textAnchor="middle"
+                          fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="15" fontWeight="bold">Smart Contract</text>
+                        <text x="750" y="105" textAnchor="middle"
+                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="11">Pool / Bridge</text>
+                        
+                        {/* Function Parameters Box */}
+                        <rect x="670" y="120" width="160" height="50" rx="6"
+                          fill={isDarkMode ? "rgba(139, 92, 246, 0.2)" : "rgba(139, 92, 246, 0.1)"}
+                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.5)" : "rgba(139, 92, 246, 0.3)"}
+                          strokeWidth="1.5"/>
+                        <text x="750" y="140" textAnchor="middle"
+                          fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="10" fontWeight="bold">Function Parameters</text>
+                        <text x="750" y="160" textAnchor="middle"
+                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="9">Prices as params</text>
+                        
+                        {/* Flow Steps */}
+                        <g id="flow-steps">
+                          {/* Step 1 */}
+                          <circle cx="150" cy="250" r="15"
+                            fill={isDarkMode ? "rgba(139, 92, 246, 0.8)" : "rgba(139, 92, 246, 0.6)"}
+                            stroke={isDarkMode ? "#fff" : "#1f2937"} strokeWidth="2"/>
+                          <text x="150" y="256" textAnchor="middle"
+                            fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="11" fontWeight="bold">1</text>
+                          <text x="150" y="280" textAnchor="middle"
+                            fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">User initiates</text>
+                          <text x="150" y="295" textAnchor="middle"
+                            fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="9">transaction</text>
+                          
+                          {/* Step 2 */}
+                          <circle cx="450" cy="250" r="15"
+                            fill={isDarkMode ? "rgba(139, 92, 246, 0.8)" : "rgba(139, 92, 246, 0.6)"}
+                            stroke={isDarkMode ? "#fff" : "#1f2937"} strokeWidth="2"/>
+                          <text x="450" y="256" textAnchor="middle"
+                            fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="11" fontWeight="bold">2</text>
+                          <text x="450" y="280" textAnchor="middle"
+                            fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">Frontend queries</text>
+                          <text x="450" y="295" textAnchor="middle"
+                            fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="9">Price API</text>
+                          
+                          {/* Step 3 */}
+                          <circle cx="750" cy="250" r="15"
+                            fill={isDarkMode ? "rgba(139, 92, 246, 0.8)" : "rgba(139, 92, 246, 0.6)"}
+                            stroke={isDarkMode ? "#fff" : "#1f2937"} strokeWidth="2"/>
+                          <text x="750" y="256" textAnchor="middle"
+                            fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="11" fontWeight="bold">3</text>
+                          <text x="750" y="280" textAnchor="middle"
+                            fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">Submit transaction</text>
+                          <text x="750" y="295" textAnchor="middle"
+                            fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="9">with prices</text>
+                        </g>
+                        
+                        {/* Arrows */}
+                        {/* Step 1 to 2 */}
+                        <path d="M 165 250 L 435 250" 
+                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.6)" : "rgba(139, 92, 246, 0.5)"}
+                          strokeWidth="2.5" fill="none" markerEnd="url(#arrowhead)"/>
+                        <text x="300" y="245" textAnchor="middle"
+                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="9">User action</text>
+                        
+                        {/* Step 2: Frontend to API */}
+                        <path d="M 350 125 Q 250 200 150 150" 
+                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.5)" : "rgba(139, 92, 246, 0.4)"}
+                          strokeWidth="2" fill="none" strokeDasharray="4,4" markerEnd="url(#arrowhead)"/>
+                        <text x="250" y="130" textAnchor="middle"
+                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="9">HTTP GET</text>
+                        
+                        {/* Step 2: API to Frontend */}
+                        <path d="M 250 150 Q 300 100 350 125" 
+                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.5)" : "rgba(139, 92, 246, 0.4)"}
+                          strokeWidth="2" fill="none" strokeDasharray="4,4" markerEnd="url(#arrowhead)"/>
+                        <text x="300" y="110" textAnchor="middle"
+                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="9">Price data</text>
+                        
+                        {/* Step 2 to 3 */}
+                        <path d="M 550 250 L 735 250" 
+                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.6)" : "rgba(139, 92, 246, 0.5)"}
+                          strokeWidth="2.5" fill="none" markerEnd="url(#arrowhead)"/>
+                        <text x="640" y="245" textAnchor="middle"
+                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="9">Transaction</text>
+                        
+                        {/* Price Format Details */}
+                        <rect x="50" y="350" width="400" height="120" rx="8"
+                          fill={isDarkMode ? "rgba(88, 28, 135, 0.2)" : "rgba(139, 92, 246, 0.1)"}
+                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.5)" : "rgba(139, 92, 246, 0.3)"}
+                          strokeWidth="2"/>
+                        <text x="250" y="375" textAnchor="middle"
+                          fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="13" fontWeight="bold">Price Format: Micro-USD</text>
+                        <text x="70" y="400" textAnchor="start"
+                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="11">• 1 micro-USD = 1,000,000 (1e6)</text>
+                        <text x="70" y="420" textAnchor="start"
+                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="11">• $1.00 = 1,000,000 micro-USD</text>
+                        <text x="70" y="440" textAnchor="start"
+                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="11">• All prices converted before passing to contract</text>
+                        <text x="70" y="460" textAnchor="start"
+                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="11">• No on-chain oracle queries required</text>
+                        
+                        {/* Benefits */}
+                        <rect x="450" y="350" width="400" height="120" rx="8"
+                          fill={isDarkMode ? "rgba(88, 28, 135, 0.2)" : "rgba(139, 92, 246, 0.1)"}
+                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.5)" : "rgba(139, 92, 246, 0.3)"}
+                          strokeWidth="2"/>
+                        <text x="650" y="375" textAnchor="middle"
+                          fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="13" fontWeight="bold">Benefits</text>
+                        <text x="470" y="400" textAnchor="start"
+                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="11">• Lower gas costs (no on-chain queries)</text>
+                        <text x="470" y="420" textAnchor="start"
+                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="11">• Better flexibility (multiple data sources)</text>
+                        <text x="470" y="440" textAnchor="start"
+                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="11">• Faster transaction processing</text>
+                        <text x="470" y="460" textAnchor="start"
+                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="11">• Reduced dependency on oracle networks</text>
+                        
+                        {/* Example Transaction */}
+                        <rect x="200" y="500" width="500" height="80" rx="8"
+                          fill={isDarkMode ? "rgba(0, 0, 0, 0.3)" : "rgba(255, 255, 255, 0.5)"}
+                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.4)" : "rgba(139, 92, 246, 0.3)"}
+                          strokeWidth="1.5"/>
+                        <text x="450" y="525" textAnchor="middle"
+                          fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="12" fontWeight="bold">Example: Swap Transaction</text>
+                        <text x="220" y="550" textAnchor="start"
+                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">swap(currencyA, currencyB, amount, priceA, priceB)</text>
+                        <text x="220" y="570" textAnchor="start"
+                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">• priceA and priceB are fetched off-chain and passed as parameters</text>
+                        
+                        {/* Arrow marker */}
+                        <defs>
+                          <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+                            <polygon points="0 0, 10 3, 0 6" 
+                              fill={isDarkMode ? "rgba(139, 92, 246, 0.7)" : "rgba(139, 92, 246, 0.5)"}/>
+                          </marker>
+                        </defs>
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            {/* Swapping Mechanism Section */}
+            <section id="swapping" className="mb-16 scroll-mt-28">
+              <div className={sectionCardClass()}>
+                <h2 className={headingClass()}>Swapping Mechanism</h2>
+                
+                <div className="mb-8">
+                  <h3 className={subHeadingClass()}>Direct A→B Swaps (Infinity Pool Core)</h3>
+                  <p className={textClass()}>
+                    Unlike traditional DEXs that require routing through intermediate tokens, StableX enables direct swaps 
+                    between any two regional stablecoins. This is the core of the infinity pool concept.
+                  </p>
+                  <ul className={listTextClass()}>
+                    <li>• <strong className={strongClass()}>No USD intermediate</strong> - direct exchange between regional stablecoins</li>
+                    <li>• <strong className={strongClass()}>Rate calculation:</strong> rate_A_to_B = price_B / price_A (both in USD/[CURRENCY] format)</li>
+                    <li>• <strong className={strongClass()}>Single fee applied</strong> based on target asset depth</li>
+                    <li>• <strong className={strongClass()}>True infinity pool mechanics</strong> - all assets in one unified pool</li>
+                    <li>• <strong className={strongClass()}>Prices passed as parameters</strong> - queried from API off-chain before transaction</li>
+                  </ul>
+                  
+                  {/* Chart 7: Direct A→B Swap Flow */}
+                  <div className="mb-6">
+                    <h4 className={chartTitleClass()}>Chart 7: Direct A→B Swap Flow</h4>
+                    <div className={cn(
+                      "rounded-lg p-4 border overflow-x-auto",
+                      isDarkMode 
+                        ? "bg-black/40 border-white/20"
+                        : "bg-gray-50 border-gray-300"
+                    )}>
+                      <svg viewBox="0 0 900 500" className="w-full h-auto">
+                        {/* User */}
+                        <rect x="50" y="200" width="120" height="60" rx="8"
+                          fill={isDarkMode ? "rgba(139, 92, 246, 0.2)" : "rgba(139, 92, 246, 0.1)"}
+                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.5)" : "rgba(139, 92, 246, 0.3)"}
+                          strokeWidth="2"/>
+                        <text x="110" y="225" textAnchor="middle"
+                          fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="12" fontWeight="bold">User</text>
+                        <text x="110" y="245" textAnchor="middle"
+                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">Wants to swap</text>
+                        
+                        {/* Currency A */}
+                        <rect x="50" y="50" width="120" height="60" rx="8"
+                          fill={isDarkMode ? "rgba(139, 92, 246, 0.25)" : "rgba(139, 92, 246, 0.12)"}
+                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.6)" : "rgba(139, 92, 246, 0.4)"}
+                          strokeWidth="2"/>
+                        <text x="110" y="75" textAnchor="middle"
+                          fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="13" fontWeight="bold">Currency A</text>
+                        <text x="110" y="95" textAnchor="middle"
+                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">e.g., CHFX</text>
+                        
+                        {/* Price Feed API */}
+                        <rect x="750" y="50" width="100" height="60" rx="8"
+                          fill={isDarkMode ? "rgba(139, 92, 246, 0.2)" : "rgba(139, 92, 246, 0.1)"}
+                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.5)" : "rgba(139, 92, 246, 0.3)"}
+                          strokeWidth="2"/>
+                        <text x="800" y="75" textAnchor="middle"
+                          fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="12" fontWeight="bold">Price API</text>
+                        <text x="800" y="95" textAnchor="middle"
+                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">Off-Chain</text>
+                        
+                        {/* Pool */}
+                        <rect x="350" y="150" width="200" height="180" rx="10"
+                          fill={isDarkMode ? "rgba(75, 20, 120, 0.3)" : "rgba(139, 92, 246, 0.15)"}
+                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.7)" : "rgba(139, 92, 246, 0.5)"}
+                          strokeWidth="3"/>
+                        <text x="450" y="180" textAnchor="middle"
+                          fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="14" fontWeight="bold">Unified Pool</text>
+                        <text x="450" y="205" textAnchor="middle"
+                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="11">All Currencies</text>
+                        <text x="450" y="230" textAnchor="middle"
+                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">USDC + CHFX + TRYB + SEKX</text>
+                        
+                        {/* Pool Balance Box */}
+                        <rect x="370" y="250" width="160" height="60" rx="6"
+                          fill={isDarkMode ? "rgba(139, 92, 246, 0.15)" : "rgba(139, 92, 246, 0.08)"}
+                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.4)" : "rgba(139, 92, 246, 0.25)"}
+                          strokeWidth="1.5"/>
+                        <text x="450" y="270" textAnchor="middle"
+                          fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="10" fontWeight="bold">Pool Balance</text>
+                        <text x="450" y="290" textAnchor="middle"
+                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="9">Updates after swap</text>
+                        <text x="450" y="305" textAnchor="middle"
+                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="9">Fee calculated</text>
+                        
+                        {/* Currency B */}
+                        <rect x="750" y="200" width="120" height="60" rx="8"
+                          fill={isDarkMode ? "rgba(139, 92, 246, 0.25)" : "rgba(139, 92, 246, 0.12)"}
+                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.6)" : "rgba(139, 92, 246, 0.4)"}
+                          strokeWidth="2"/>
+                        <text x="810" y="225" textAnchor="middle"
+                          fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="13" fontWeight="bold">Currency B</text>
+                        <text x="810" y="245" textAnchor="middle"
+                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">e.g., TRYB</text>
+                        
+                        {/* Steps */}
+                        <g id="steps">
+                          {/* Step 1 */}
+                          <circle cx="200" cy="80" r="15"
+                            fill={isDarkMode ? "rgba(139, 92, 246, 0.8)" : "rgba(139, 92, 246, 0.6)"}
+                            stroke={isDarkMode ? "#fff" : "#1f2937"} strokeWidth="2"/>
+                          <text x="200" y="86" textAnchor="middle"
+                            fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="11" fontWeight="bold">1</text>
+                          <text x="200" y="110" textAnchor="middle"
+                            fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">User sends</text>
+                          <text x="200" y="125" textAnchor="middle"
+                            fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">Currency A</text>
+                          
+                          {/* Step 2 */}
+                          <circle cx="200" cy="230" r="15"
+                            fill={isDarkMode ? "rgba(139, 92, 246, 0.8)" : "rgba(139, 92, 246, 0.6)"}
+                            stroke={isDarkMode ? "#fff" : "#1f2937"} strokeWidth="2"/>
+                          <text x="200" y="236" textAnchor="middle"
+                            fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="11" fontWeight="bold">2</text>
+                          <text x="200" y="260" textAnchor="middle"
+                            fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">Query prices</text>
+                          
+                          {/* Step 3 */}
+                          <circle cx="450" cy="100" r="15"
+                            fill={isDarkMode ? "rgba(139, 92, 246, 0.8)" : "rgba(139, 92, 246, 0.6)"}
+                            stroke={isDarkMode ? "#fff" : "#1f2937"} strokeWidth="2"/>
+                          <text x="450" y="106" textAnchor="middle"
+                            fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="11" fontWeight="bold">3</text>
+                          <text x="450" y="130" textAnchor="middle"
+                            fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">Calculate rate</text>
+                          <text x="450" y="145" textAnchor="middle"
+                            fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="9">rate = price_B / price_A</text>
+                          
+                          {/* Step 4 */}
+                          <circle cx="450" cy="350" r="15"
+                            fill={isDarkMode ? "rgba(139, 92, 246, 0.8)" : "rgba(139, 92, 246, 0.6)"}
+                            stroke={isDarkMode ? "#fff" : "#1f2937"} strokeWidth="2"/>
+                          <text x="450" y="356" textAnchor="middle"
+                            fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="11" fontWeight="bold">4</text>
+                          <text x="450" y="380" textAnchor="middle"
+                            fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">Calculate fee</text>
+                          <text x="450" y="395" textAnchor="middle"
+                            fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="9">Based on pool depth</text>
+                          
+                          {/* Step 5 */}
+                          <circle cx="700" cy="230" r="15"
+                            fill={isDarkMode ? "rgba(139, 92, 246, 0.8)" : "rgba(139, 92, 246, 0.6)"}
+                            stroke={isDarkMode ? "#fff" : "#1f2937"} strokeWidth="2"/>
+                          <text x="700" y="236" textAnchor="middle"
+                            fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="11" fontWeight="bold">5</text>
+                          <text x="700" y="260" textAnchor="middle"
+                            fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">Direct transfer</text>
+                          <text x="700" y="275" textAnchor="middle"
+                            fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="9">No intermediate</text>
+                        </g>
+                        
+                        {/* Arrows */}
+                        {/* Step 1: User sends Currency A */}
+                        <path d="M 170 80 L 350 180" 
+                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.6)" : "rgba(139, 92, 246, 0.5)"}
+                          strokeWidth="2.5" fill="none" markerEnd="url(#arrowhead)"/>
+                        <text x="250" y="120" textAnchor="middle"
+                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="9">Send A</text>
+                        
+                        {/* Step 2: Query prices */}
+                        <path d="M 110 230 Q 400 150 750 80" 
+                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.4)" : "rgba(139, 92, 246, 0.3)"}
+                          strokeWidth="1.5" fill="none" strokeDasharray="4,4" markerEnd="url(#arrowhead)"/>
+                        <text x="430" y="100" textAnchor="middle"
+                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="9">Query prices</text>
+                        
+                        {/* Step 3: Prices to pool */}
+                        <path d="M 800 110 L 600 150" 
+                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.4)" : "rgba(139, 92, 246, 0.3)"}
+                          strokeWidth="1.5" fill="none" strokeDasharray="4,4" markerEnd="url(#arrowhead)"/>
+                        <text x="700" y="125" textAnchor="middle"
+                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="9">Price params</text>
+                        
+                        {/* Step 4: Pool calculates */}
+                        <path d="M 450 330 L 450 300" 
+                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.5)" : "rgba(139, 92, 246, 0.4)"}
+                          strokeWidth="2" fill="none"/>
+                        
+                        {/* Step 5: Pool sends Currency B */}
+                        <path d="M 550 240 L 750 230" 
+                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.6)" : "rgba(139, 92, 246, 0.5)"}
+                          strokeWidth="2.5" fill="none" markerEnd="url(#arrowhead)"/>
+                        <text x="650" y="230" textAnchor="middle"
+                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="9">Receive B</text>
+                        
+                        {/* No Intermediate Label */}
+                        <rect x="300" y="400" width="300" height="50" rx="6"
+                          fill={isDarkMode ? "rgba(88, 28, 135, 0.3)" : "rgba(139, 92, 246, 0.15)"}
+                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.6)" : "rgba(139, 92, 246, 0.4)"}
+                          strokeWidth="2"/>
+                        <text x="450" y="425" textAnchor="middle"
+                          fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="13" fontWeight="bold">Direct A→B Swap</text>
+                        <text x="450" y="445" textAnchor="middle"
+                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">No intermediate token required</text>
+                        
+                        {/* Arrow marker */}
+                        <defs>
+                          <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+                            <polygon points="0 0, 10 3, 0 6" 
+                              fill={isDarkMode ? "rgba(139, 92, 246, 0.7)" : "rgba(139, 92, 246, 0.5)"}/>
+                          </marker>
+                        </defs>
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            {/* Fee Structure Section */}
+            <section id="fee-structure" className="mb-16 scroll-mt-28">
+              <div className={sectionCardClass()}>
+                <h2 className={headingClass()}>Fee Structure</h2>
+                
+                <div className="mb-8">
+                  <h3 className={subHeadingClass()}>Three-Tier Fee System (80%/30% Thresholds)</h3>
+                  
+                  <div className="space-y-6 mb-6">
+                    <div className={cn(
+                      "rounded-lg p-6 border",
+                      isDarkMode 
+                        ? "bg-white/5 border-white/10"
+                        : "bg-gray-50 border-gray-200"
+                    )}>
+                      <h4 className={chartTitleClass()}>Tier 1: ≥80% Coverage</h4>
+                      <p className={cn(
+                        "text-sm mb-2",
+                        isDarkMode ? "text-zinc-300" : "text-gray-700"
+                      )}>
+                        Fixed cheap rate for stablecoins when pool has sufficient depth.
+                      </p>
+                      <p className={cn(
+                        "text-xs",
+                        isDarkMode ? "text-zinc-400" : "text-gray-600"
+                      )}>
+                        Fee = floor + base (no deviation penalty)<br/>
+                        Example: 7 bps (0.07%) - optimal for healthy pools
+                      </p>
+                    </div>
+
+                    <div className={cn(
+                      "rounded-lg p-6 border",
+                      isDarkMode 
+                        ? "bg-white/5 border-white/10"
+                        : "bg-gray-50 border-gray-200"
+                    )}>
+                      <h4 className={chartTitleClass()}>Tier 2: 30-80% Coverage</h4>
+                      <p className={cn(
+                        "text-sm mb-2",
+                        isDarkMode ? "text-zinc-300" : "text-gray-700"
+                      )}>
+                        Linear/pricewise fee that scales with deviation from target.
+                      </p>
+                      <p className={cn(
+                        "text-xs",
+                        isDarkMode ? "text-zinc-400" : "text-gray-600"
+                      )}>
+                        Fee = floor + base + k * deviation<br/>
+                        Example: 7-32 bps range
+                      </p>
+                    </div>
+
+                    <div className={cn(
+                      "rounded-lg p-6 border",
+                      isDarkMode 
+                        ? "bg-white/5 border-white/10"
+                        : "bg-gray-50 border-gray-200"
+                    )}>
+                      <h4 className={chartTitleClass()}>Tier 3: &lt;30% Coverage</h4>
+                      <p className={cn(
+                        "text-sm mb-2",
+                        isDarkMode ? "text-zinc-300" : "text-gray-700"
+                      )}>
+                        Sudden jump - dramatic fee increase to discourage draining.
+                      </p>
+                      <p className={cn(
+                        "text-xs",
+                        isDarkMode ? "text-zinc-400" : "text-gray-600"
+                      )}>
+                        Fee = (floor + base) * 10x + exponential term<br/>
+                        No cap - fees can exceed 14%+ to discourage draining<br/>
+                        Example: 77 bps at 29%, up to 1432 bps at 1%
+                      </p>
+                    </div>
+                  </div>
+                  
+                  {/* Chart 6: Three-Tier Fee Curve */}
+                  <div className="mb-6">
+                    <h4 className={chartTitleClass()}>Chart 6: Three-Tier Fee Curve</h4>
+                    <div className={cn(
+                      "rounded-lg p-4 border overflow-x-auto",
+                      isDarkMode 
+                        ? "bg-black/40 border-white/20"
+                        : "bg-gray-50 border-gray-300"
+                    )}>
+                      <svg viewBox="0 0 800 500" className="w-full h-auto">
+                        {/* Axes */}
+                        {/* Y-axis */}
+                        <line x1="80" y1="50" x2="80" y2="420"
+                          stroke={isDarkMode ? "rgba(255, 255, 255, 0.3)" : "rgba(0, 0, 0, 0.3)"}
+                          strokeWidth="2"/>
+                        {/* X-axis */}
+                        <line x1="80" y1="420" x2="750" y2="420"
+                          stroke={isDarkMode ? "rgba(255, 255, 255, 0.3)" : "rgba(0, 0, 0, 0.3)"}
+                          strokeWidth="2"/>
+                        
+                        {/* Y-axis labels - scaled to 1500 bps max */}
+                        <text x="40" y="425" textAnchor="middle"
+                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="11">0</text>
+                        <text x="40" y="385" textAnchor="middle"
+                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="11">300</text>
+                        <text x="40" y="345" textAnchor="middle"
+                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="11">600</text>
+                        <text x="40" y="305" textAnchor="middle"
+                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="11">900</text>
+                        <text x="40" y="265" textAnchor="middle"
+                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="11">1200</text>
+                        <text x="40" y="65" textAnchor="middle"
+                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="11">1500</text>
+                        <text x="20" y="240" textAnchor="middle"
+                          fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="12" fontWeight="bold" transform="rotate(-90, 20, 240)">Fee (bps)</text>
+                        
+                        {/* X-axis labels */}
+                        <text x="80" y="445" textAnchor="middle"
+                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="11">0%</text>
+                        <text x="200" y="445" textAnchor="middle"
+                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="11">20%</text>
+                        <text x="320" y="445" textAnchor="middle"
+                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="11">40%</text>
+                        <text x="440" y="445" textAnchor="middle"
+                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="11">60%</text>
+                        <text x="560" y="445" textAnchor="middle"
+                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="11">80%</text>
+                        <text x="680" y="445" textAnchor="middle"
+                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="11">100%</text>
+                        <text x="415" y="470" textAnchor="middle"
+                          fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="12" fontWeight="bold">Pool Coverage (%)</text>
+                        
+                        {/* Threshold lines */}
+                        {/* 30% threshold */}
+                        <line x1="272" y1="50" x2="272" y2="420"
+                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.4)" : "rgba(139, 92, 246, 0.3)"}
+                          strokeWidth="1.5" strokeDasharray="4,4"/>
+                        <text x="272" y="435" textAnchor="middle"
+                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10" fontWeight="bold">30%</text>
+                        
+                        {/* 80% threshold */}
+                        <line x1="584" y1="50" x2="584" y2="420"
+                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.4)" : "rgba(139, 92, 246, 0.3)"}
+                          strokeWidth="1.5" strokeDasharray="4,4"/>
+                        <text x="584" y="435" textAnchor="middle"
+                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10" fontWeight="bold">80%</text>
+                        
+                        {/* Fee Curve - Based on actual calculation mechanism */}
+                        {/* Formula: 
+                            Tier 1 (≥80%): fee = floor(5) + base(2) = 7 bps (flat)
+                            Tier 2 (30-80%): fee = floor + base + k*dev/10000 (linear, 7-32 bps)
+                            Tier 3 (<30%): fee = (floor+base)*10 + k*dev^2*5/(threshold*10000) (exponential, no cap)
+                        */}
+                        {/* Y-axis: 420 = 0 bps, 50 = 1500 bps. Formula: y = 420 - (bps/1500) * 370 */}
+                        {/* Key points: 7 bps @ 80% = y ~418, 32 bps @ 30% = y ~412, 77 bps @ 29% = y ~401, 1432 bps @ 1% = y ~66 */}
+                        
+                        {/* Tier 3: Exponential (<30%) - from 32 bps @ 30% to 1432 bps @ 1% */}
+                        {/* Calculated points based on formula: fee = (floor+base)*10 + k*dev^2*5/(threshold*10000) */}
+                        {/* Coverage → Fee: 30%→32bps(y=412), 29%→77bps(y=401), 25%→177bps(y=376), 20%→327bps(y=339), 15%→552bps(y=284), 10%→827bps(y=216), 5%→1152bps(y=136), 1%→1432bps(y=66) */}
+                        {/* X positions: 30%=272, 29%=274, 25%=248, 20%=214, 15%=181, 10%=147, 5%=114, 1%=87 */}
+                        {/* Using smooth cubic bezier curves to connect calculated points */}
+                        <path d="M 272 412 
+                                  C 273 406, 273 403, 274 401
+                                  C 271 398, 265 390, 248 376
+                                  C 230 360, 220 350, 214 339
+                                  C 205 325, 195 310, 181 284
+                                  C 170 265, 160 245, 147 216
+                                  C 135 190, 125 165, 114 136
+                                  C 105 110, 98 90, 87 66"
+                          fill="none"
+                          stroke={isDarkMode ? "rgba(239, 68, 68, 0.8)" : "rgba(220, 38, 38, 0.8)"}
+                          strokeWidth="3"/>
+                        
+                        {/* Tier 2: Linear (30-80%) - from 32 bps @ 30% to 7 bps @ 80% */}
+                        {/* Linear interpolation: 7 bps @ 80% (y=418), 32 bps @ 30% (y=412) */}
+                        <path d="M 272 412 L 584 418"
+                          fill="none"
+                          stroke={isDarkMode ? "rgba(251, 191, 36, 0.8)" : "rgba(217, 119, 6, 0.8)"}
+                          strokeWidth="3"/>
+                        
+                        {/* Tier 1: Flat (≥80%) - constant 7 bps */}
+                        <path d="M 584 418 L 750 418"
+                          fill="none"
+                          stroke={isDarkMode ? "rgba(34, 197, 94, 0.8)" : "rgba(22, 163, 74, 0.8)"}
+                          strokeWidth="3"/>
+                        
+                        {/* Tier Labels */}
+                        <rect x="600" y="60" width="140" height="100" rx="6"
+                          fill={isDarkMode ? "rgba(0, 0, 0, 0.4)" : "rgba(255, 255, 255, 0.8)"}
+                          stroke={isDarkMode ? "rgba(255, 255, 255, 0.2)" : "rgba(0, 0, 0, 0.2)"}
+                          strokeWidth="1"/>
+                        <text x="670" y="85" textAnchor="middle"
+                          fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="12" fontWeight="bold">Tiers</text>
+                        
+                        {/* Tier 1 */}
+                        <line x1="610" y1="105" x2="630" y2="105"
+                          stroke={isDarkMode ? "rgba(34, 197, 94, 0.8)" : "rgba(22, 163, 74, 0.8)"}
+                          strokeWidth="3"/>
+                        <text x="640" y="110" textAnchor="start"
+                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">Tier 1: ≥80% (7 bps)</text>
+                        
+                        {/* Tier 2 */}
+                        <line x1="610" y1="125" x2="630" y2="125"
+                          stroke={isDarkMode ? "rgba(251, 191, 36, 0.8)" : "rgba(217, 119, 6, 0.8)"}
+                          strokeWidth="3"/>
+                        <text x="640" y="130" textAnchor="start"
+                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">Tier 2: 30-80% (7-32 bps)</text>
+                        
+                        {/* Tier 3 */}
+                        <line x1="610" y1="145" x2="630" y2="145"
+                          stroke={isDarkMode ? "rgba(239, 68, 68, 0.8)" : "rgba(220, 38, 38, 0.8)"}
+                          strokeWidth="3"/>
+                        <text x="640" y="150" textAnchor="start"
+                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">Tier 3: &lt;30% (exponential)</text>
+                        
+                        {/* Example points - based on actual calculation values */}
+                        {/* 7 bps @ 80%: y = 420 - (7/1500) * 370 ≈ 418 */}
+                        <circle cx="584" cy="418" r="4"
+                          fill={isDarkMode ? "#fff" : "#1f2937"}
+                          stroke={isDarkMode ? "rgba(34, 197, 94, 0.8)" : "rgba(22, 163, 74, 0.8)"}
+                          strokeWidth="2"/>
+                        <text x="595" y="413" textAnchor="start"
+                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="9">7 bps @ 80%</text>
+                        
+                        {/* 32 bps @ 30%: y = 420 - (32/1500) * 370 ≈ 412 */}
+                        <circle cx="272" cy="412" r="4"
+                          fill={isDarkMode ? "#fff" : "#1f2937"}
+                          stroke={isDarkMode ? "rgba(251, 191, 36, 0.8)" : "rgba(217, 119, 6, 0.8)"}
+                          strokeWidth="2"/>
+                        <text x="285" y="407" textAnchor="start"
+                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="9">32 bps @ 30%</text>
+                        
+                        {/* 77 bps @ 29%: y = 420 - (77/1500) * 370 ≈ 401 */}
+                        <circle cx="268" cy="401" r="4"
+                          fill={isDarkMode ? "#fff" : "#1f2937"}
+                          stroke={isDarkMode ? "rgba(239, 68, 68, 0.8)" : "rgba(220, 38, 38, 0.8)"}
+                          strokeWidth="2"/>
+                        <text x="280" y="396" textAnchor="start"
+                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="9">77 bps @ 29%</text>
+                        
+                        {/* 1432 bps @ 1%: y = 420 - (1432/1500) * 370 ≈ 66 */}
+                        <circle cx="87" cy="66" r="4"
+                          fill={isDarkMode ? "#fff" : "#1f2937"}
+                          stroke={isDarkMode ? "rgba(239, 68, 68, 0.8)" : "rgba(220, 38, 38, 0.8)"}
+                          strokeWidth="2"/>
+                        <text x="100" y="61" textAnchor="start"
+                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="9">1432 bps @ 1%</text>
+                      </svg>
                     </div>
                   </div>
                 </div>
@@ -1238,877 +2143,6 @@ export default function Whitepaper() {
               </div>
             </section>
 
-            {/* Multi-Chain Architecture Section */}
-            <section id="multi-chain" className="mb-16 scroll-mt-28">
-              <div className={sectionCardClass()}>
-                <h2 className={headingClass()}>Multi-Chain Architecture</h2>
-                
-                <div className="mb-8">
-                  <h3 className={subHeadingClass()}>L1 Components (Move-based)</h3>
-                  <ul className={listTextClass()}>
-                    <li>• <strong className={strongClass()}>Native tokens:</strong> CHFX, TRYB, SEKX, USDC, SBX</li>
-                    <li>• <strong className={strongClass()}>Pool contract:</strong> sbx_pool.move</li>
-                    <li>• <strong className={strongClass()}>Bridge contract:</strong> bridge_l1.move (locks/unlocks tokens)</li>
-                    <li>• <strong className={strongClass()}>Flash vault:</strong> flash_vault.move</li>
-                    <li>• <strong className={strongClass()}>Shared objects:</strong> Pool and Registry created as shared objects</li>
-                  </ul>
-                </div>
-
-                <div className="mb-8">
-                  <h3 className={subHeadingClass()}>EVM Components (Solidity-based)</h3>
-                  <ul className={listTextClass()}>
-                    <li>• <strong className={strongClass()}>ERC-20 tokens:</strong> CHFX, TRYB, SEKX, USDC, wSBX (wrapped SBX)</li>
-                    <li>• <strong className={strongClass()}>Pool contract:</strong> StableXPool.sol</li>
-                    <li>• <strong className={strongClass()}>Bridge contract:</strong> EVMBridge.sol (mints/burns wrapped tokens)</li>
-                    <li>• <strong className={strongClass()}>Standard ERC-20:</strong> All tokens follow ERC-20 standard</li>
-                  </ul>
-                </div>
-
-                <div className="mb-8">
-                  <h3 className={subHeadingClass()}>Unified Liquidity</h3>
-                  <p className={textClass()}>
-                    While pools exist separately on L1 and EVM, they are bridged via cross-chain transfers, 
-                    allowing users to access liquidity from either chain seamlessly.
-                  </p>
-                  
-                  {/* Chart 4: Multi-Chain Architecture */}
-                  <div className="mb-6">
-                    <h4 className={chartTitleClass()}>Chart 4: Multi-Chain Architecture</h4>
-                    <div className={cn(
-                      "rounded-lg p-4 border overflow-x-auto",
-                      isDarkMode 
-                        ? "bg-black/40 border-white/20"
-                        : "bg-gray-50 border-gray-300"
-                    )}>
-                      <svg viewBox="0 0 900 600" className="w-full h-auto">
-                        {/* L1 Layer */}
-                        <g id="l1-layer">
-                          <rect x="50" y="50" width="350" height="500" rx="12"
-                            fill={isDarkMode ? "rgba(75, 20, 120, 0.2)" : "rgba(139, 92, 246, 0.08)"}
-                            stroke={isDarkMode ? "rgba(139, 92, 246, 0.6)" : "rgba(139, 92, 246, 0.4)"}
-                            strokeWidth="3"/>
-                          <text x="225" y="80" textAnchor="middle"
-                            fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="18" fontWeight="bold">IOTA L1</text>
-                          <text x="225" y="100" textAnchor="middle"
-                            fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="12">Move-based Contracts</text>
-                          
-                          {/* L1 Pool */}
-                          <rect x="100" y="140" width="300" height="100" rx="8"
-                            fill={isDarkMode ? "rgba(139, 92, 246, 0.2)" : "rgba(139, 92, 246, 0.1)"}
-                            stroke={isDarkMode ? "rgba(139, 92, 246, 0.6)" : "rgba(139, 92, 246, 0.4)"}
-                            strokeWidth="2"/>
-                          <text x="250" y="170" textAnchor="middle"
-                            fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="13" fontWeight="bold">sbx_pool.move</text>
-                          <text x="150" y="200" textAnchor="start"
-                            fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">• Unified basket</text>
-                          <text x="150" y="220" textAnchor="start"
-                            fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">• Shared object</text>
-                          
-                          {/* L1 Bridge */}
-                          <rect x="100" y="260" width="300" height="80" rx="8"
-                            fill={isDarkMode ? "rgba(139, 92, 246, 0.2)" : "rgba(139, 92, 246, 0.1)"}
-                            stroke={isDarkMode ? "rgba(139, 92, 246, 0.6)" : "rgba(139, 92, 246, 0.4)"}
-                            strokeWidth="2"/>
-                          <text x="250" y="285" textAnchor="middle"
-                            fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="13" fontWeight="bold">bridge_l1.move</text>
-                          <text x="150" y="310" textAnchor="start"
-                            fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">• Lock/Unlock tokens</text>
-                          <text x="150" y="330" textAnchor="start"
-                            fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">• Emit events</text>
-                          
-                          {/* L1 Tokens */}
-                          <rect x="100" y="360" width="300" height="120" rx="8"
-                            fill={isDarkMode ? "rgba(139, 92, 246, 0.15)" : "rgba(139, 92, 246, 0.08)"}
-                            stroke={isDarkMode ? "rgba(139, 92, 246, 0.5)" : "rgba(139, 92, 246, 0.3)"}
-                            strokeWidth="2"/>
-                          <text x="250" y="385" textAnchor="middle"
-                            fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="13" fontWeight="bold">Native Tokens</text>
-                          <text x="150" y="410" textAnchor="start"
-                            fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">• USDC</text>
-                          <text x="150" y="430" textAnchor="start"
-                            fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">• CHFX, TRYB, SEKX</text>
-                          <text x="150" y="450" textAnchor="start"
-                            fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">• SBX</text>
-                          <text x="150" y="470" textAnchor="start"
-                            fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">• Flash vault</text>
-                        </g>
-                        
-                        {/* EVM Layer */}
-                        <g id="evm-layer">
-                          <rect x="500" y="50" width="350" height="500" rx="12"
-                            fill={isDarkMode ? "rgba(75, 20, 120, 0.2)" : "rgba(139, 92, 246, 0.08)"}
-                            stroke={isDarkMode ? "rgba(139, 92, 246, 0.6)" : "rgba(139, 92, 246, 0.4)"}
-                            strokeWidth="3"/>
-                          <text x="675" y="80" textAnchor="middle"
-                            fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="18" fontWeight="bold">IOTA EVM</text>
-                          <text x="675" y="100" textAnchor="middle"
-                            fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="12">Solidity-based Contracts</text>
-                          
-                          {/* EVM Pool */}
-                          <rect x="550" y="140" width="250" height="100" rx="8"
-                            fill={isDarkMode ? "rgba(139, 92, 246, 0.2)" : "rgba(139, 92, 246, 0.1)"}
-                            stroke={isDarkMode ? "rgba(139, 92, 246, 0.6)" : "rgba(139, 92, 246, 0.4)"}
-                            strokeWidth="2"/>
-                          <text x="675" y="170" textAnchor="middle"
-                            fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="13" fontWeight="bold">StableXPool.sol</text>
-                          <text x="570" y="200" textAnchor="start"
-                            fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">• Unified basket</text>
-                          <text x="570" y="220" textAnchor="start"
-                            fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">• Standard contract</text>
-                          
-                          {/* EVM Bridge */}
-                          <rect x="550" y="260" width="250" height="80" rx="8"
-                            fill={isDarkMode ? "rgba(139, 92, 246, 0.2)" : "rgba(139, 92, 246, 0.1)"}
-                            stroke={isDarkMode ? "rgba(139, 92, 246, 0.6)" : "rgba(139, 92, 246, 0.4)"}
-                            strokeWidth="2"/>
-                          <text x="675" y="285" textAnchor="middle"
-                            fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="13" fontWeight="bold">EVMBridge.sol</text>
-                          <text x="570" y="310" textAnchor="start"
-                            fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">• Mint/Burn wrapped tokens</text>
-                          <text x="570" y="330" textAnchor="start"
-                            fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">• Emit events</text>
-                          
-                          {/* EVM Tokens */}
-                          <rect x="550" y="360" width="250" height="120" rx="8"
-                            fill={isDarkMode ? "rgba(139, 92, 246, 0.15)" : "rgba(139, 92, 246, 0.08)"}
-                            stroke={isDarkMode ? "rgba(139, 92, 246, 0.5)" : "rgba(139, 92, 246, 0.3)"}
-                            strokeWidth="2"/>
-                          <text x="675" y="385" textAnchor="middle"
-                            fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="13" fontWeight="bold">ERC-20 Tokens</text>
-                          <text x="570" y="410" textAnchor="start"
-                            fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">• USDC</text>
-                          <text x="570" y="430" textAnchor="start"
-                            fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">• CHFX, TRYB, SEKX</text>
-                          <text x="570" y="450" textAnchor="start"
-                            fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">• wSBX (wrapped SBX)</text>
-                          <text x="570" y="470" textAnchor="start"
-                            fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">• Standard ERC-20</text>
-                        </g>
-                        
-                        {/* Bridge Connection */}
-                        <g id="bridge-connection">
-                          {/* Bridge Arrow L1 → EVM */}
-                          <path d="M 400 300 Q 450 300 500 300" 
-                            stroke={isDarkMode ? "rgba(139, 92, 246, 0.7)" : "rgba(139, 92, 246, 0.6)"}
-                            strokeWidth="4" fill="none" markerEnd="url(#arrowhead-large)"/>
-                          <text x="450" y="290" textAnchor="middle"
-                            fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="12" fontWeight="bold">Bridge</text>
-                          
-                          {/* Lock → Mint */}
-                          <rect x="400" y="320" width="100" height="40" rx="6"
-                            fill={isDarkMode ? "rgba(88, 28, 135, 0.3)" : "rgba(139, 92, 246, 0.15)"}
-                            stroke={isDarkMode ? "rgba(139, 92, 246, 0.6)" : "rgba(139, 92, 246, 0.4)"}
-                            strokeWidth="1.5"/>
-                          <text x="450" y="340" textAnchor="middle"
-                            fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="10" fontWeight="bold">Lock → Mint</text>
-                          <text x="450" y="355" textAnchor="middle"
-                            fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="9">L1 → EVM</text>
-                          
-                          {/* Burn → Unlock */}
-                          <rect x="400" y="380" width="100" height="40" rx="6"
-                            fill={isDarkMode ? "rgba(88, 28, 135, 0.3)" : "rgba(139, 92, 246, 0.15)"}
-                            stroke={isDarkMode ? "rgba(139, 92, 246, 0.6)" : "rgba(139, 92, 246, 0.4)"}
-                            strokeWidth="1.5"/>
-                          <text x="450" y="400" textAnchor="middle"
-                            fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="10" fontWeight="bold">Burn → Unlock</text>
-                          <text x="450" y="415" textAnchor="middle"
-                            fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="9">EVM → L1</text>
-                          
-                          {/* Relayer */}
-                          <ellipse cx="450" cy="480" rx="60" ry="35"
-                            fill={isDarkMode ? "rgba(88, 28, 135, 0.4)" : "rgba(139, 92, 246, 0.2)"}
-                            stroke={isDarkMode ? "rgba(139, 92, 246, 0.8)" : "rgba(139, 92, 246, 0.6)"}
-                            strokeWidth="2"/>
-                          <text x="450" y="475" textAnchor="middle"
-                            fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="11" fontWeight="bold">Relayer</text>
-                          <text x="450" y="490" textAnchor="middle"
-                            fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="9">Event Watcher</text>
-                        </g>
-                        
-                        {/* Unified Liquidity Label */}
-                        <text x="450" y="550" textAnchor="middle"
-                          fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="14" fontWeight="bold">Unified Liquidity</text>
-                        <text x="450" y="570" textAnchor="middle"
-                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="11">Seamless access across both chains</text>
-                        
-                        {/* Arrow markers */}
-                        <defs>
-                          <marker id="arrowhead-large" markerWidth="12" markerHeight="12" refX="11" refY="4" orient="auto">
-                            <polygon points="0 0, 12 4, 0 8" 
-                              fill={isDarkMode ? "rgba(139, 92, 246, 0.8)" : "rgba(139, 92, 246, 0.6)"}/>
-                          </marker>
-                        </defs>
-                      </svg>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            {/* Pool Mechanics Section */}
-            <section id="pool-mechanics" className="mb-16 scroll-mt-28">
-              <div className={sectionCardClass()}>
-                <h2 className={headingClass()}>Pool Mechanics</h2>
-                
-                <div className="mb-8">
-                  <h3 className={subHeadingClass()}>Unified Basket</h3>
-                  <p className={textClass()}>
-                    All currencies (USDC + CHFX + TRYB + SEKX) exist in one unified pool. This creates deep liquidity 
-                    for all trading pairs and allows for direct swaps between any two currencies without intermediate steps.
-                  </p>
-                </div>
-
-                <div className="mb-8">
-                  <h3 className={subHeadingClass()}>SBX Token</h3>
-                  <p className={textClass()}>
-                    When users deposit into the pool, they receive SBX tokens at a 1:1 ratio with USD value. 
-                    SBX tokens represent a share of the entire pool and can be withdrawn as any supported currency 
-                    (subject to asymmetric withdrawal rules).
-                  </p>
-                </div>
-
-                <div className="mb-8">
-                  <h3 className={subHeadingClass()}>Asymmetric Withdrawal</h3>
-                  <p className={textClass()}>
-                    To maintain pool balance and incentivize regional stablecoin deposits:
-                  </p>
-                  <ul className={listTextClass()}>
-                    <li>• <strong className={strongClass()}>Regional depositors:</strong> Can withdraw any regional stablecoin OR USDC</li>
-                    <li>• <strong className={strongClass()}>USDC depositors:</strong> Can only withdraw regional stablecoins (cannot withdraw USDC)</li>
-                  </ul>
-                </div>
-
-                <div className="mb-8">
-                  <h3 className={subHeadingClass()}>Unified APY</h3>
-                  <p className={textClass()}>
-                    All depositors earn the same APY regardless of which currency they deposit. This APY is typically 
-                    higher than what USDC alone would provide, as it represents a weighted average of yields from all 
-                    currencies in the pool.
-                  </p>
-                  
-                  {/* Chart 5: Pool Architecture */}
-                  <div className="mb-6">
-                    <h4 className={chartTitleClass()}>Chart 5: Pool Architecture</h4>
-                    <div className={cn(
-                      "rounded-lg p-4 border overflow-x-auto",
-                      isDarkMode 
-                        ? "bg-black/40 border-white/20"
-                        : "bg-gray-50 border-gray-300"
-                    )}>
-                      <svg viewBox="0 0 900 700" className="w-full h-auto">
-                        {/* Central Pool */}
-                        <circle cx="450" cy="350" r="120"
-                          fill={isDarkMode ? "rgba(75, 20, 120, 0.3)" : "rgba(139, 92, 246, 0.15)"}
-                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.7)" : "rgba(139, 92, 246, 0.5)"}
-                          strokeWidth="3"/>
-                        <text x="450" y="330" textAnchor="middle"
-                          fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="16" fontWeight="bold">Unified Pool</text>
-                        <text x="450" y="350" textAnchor="middle"
-                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="12">Unified Basket</text>
-                        <text x="450" y="370" textAnchor="middle"
-                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="11">All Currencies</text>
-                        <text x="450" y="390" textAnchor="middle"
-                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">USDC + CHFX + TRYB + SEKX</text>
-                        
-                        {/* Currency Nodes */}
-                        {/* USDC */}
-                        <circle cx="450" cy="150" r="50"
-                          fill={isDarkMode ? "rgba(139, 92, 246, 0.25)" : "rgba(139, 92, 246, 0.12)"}
-                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.6)" : "rgba(139, 92, 246, 0.4)"}
-                          strokeWidth="2"/>
-                        <text x="450" y="155" textAnchor="middle"
-                          fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="14" fontWeight="bold">USDC</text>
-                        
-                        {/* CHFX */}
-                        <circle cx="200" cy="350" r="50"
-                          fill={isDarkMode ? "rgba(139, 92, 246, 0.25)" : "rgba(139, 92, 246, 0.12)"}
-                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.6)" : "rgba(139, 92, 246, 0.4)"}
-                          strokeWidth="2"/>
-                        <text x="200" y="355" textAnchor="middle"
-                          fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="14" fontWeight="bold">CHFX</text>
-                        
-                        {/* TRYB */}
-                        <circle cx="450" cy="550" r="50"
-                          fill={isDarkMode ? "rgba(139, 92, 246, 0.25)" : "rgba(139, 92, 246, 0.12)"}
-                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.6)" : "rgba(139, 92, 246, 0.4)"}
-                          strokeWidth="2"/>
-                        <text x="450" y="555" textAnchor="middle"
-                          fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="14" fontWeight="bold">TRYB</text>
-                        
-                        {/* SEKX */}
-                        <circle cx="700" cy="350" r="50"
-                          fill={isDarkMode ? "rgba(139, 92, 246, 0.25)" : "rgba(139, 92, 246, 0.12)"}
-                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.6)" : "rgba(139, 92, 246, 0.4)"}
-                          strokeWidth="2"/>
-                        <text x="700" y="355" textAnchor="middle"
-                          fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="14" fontWeight="bold">SEKX</text>
-                        
-                        {/* SBX Token */}
-                        <rect x="380" y="250" width="140" height="60" rx="8"
-                          fill={isDarkMode ? "rgba(88, 28, 135, 0.4)" : "rgba(139, 92, 246, 0.2)"}
-                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.8)" : "rgba(139, 92, 246, 0.6)"}
-                          strokeWidth="2.5"/>
-                        <text x="450" y="275" textAnchor="middle"
-                          fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="14" fontWeight="bold">SBX Token</text>
-                        <text x="450" y="295" textAnchor="middle"
-                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="11">1 SBX = 1 USD</text>
-                        
-                        {/* User Deposit */}
-                        <rect x="50" y="300" width="100" height="60" rx="8"
-                          fill={isDarkMode ? "rgba(139, 92, 246, 0.2)" : "rgba(139, 92, 246, 0.1)"}
-                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.5)" : "rgba(139, 92, 246, 0.3)"}
-                          strokeWidth="2"/>
-                        <text x="100" y="325" textAnchor="middle"
-                          fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="12" fontWeight="bold">User</text>
-                        <text x="100" y="345" textAnchor="middle"
-                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">Deposit</text>
-                        
-                        {/* User Withdrawal */}
-                        <rect x="750" y="300" width="100" height="60" rx="8"
-                          fill={isDarkMode ? "rgba(139, 92, 246, 0.2)" : "rgba(139, 92, 246, 0.1)"}
-                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.5)" : "rgba(139, 92, 246, 0.3)"}
-                          strokeWidth="2"/>
-                        <text x="800" y="325" textAnchor="middle"
-                          fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="12" fontWeight="bold">User</text>
-                        <text x="800" y="345" textAnchor="middle"
-                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">Withdraw</text>
-                        
-                        {/* Arrows - Deposit Flow */}
-                        <path d="M 150 330 L 330 350" 
-                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.6)" : "rgba(139, 92, 246, 0.5)"}
-                          strokeWidth="2.5" fill="none" markerEnd="url(#arrowhead)"/>
-                        <text x="240" y="335" textAnchor="middle"
-                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">Deposit</text>
-                        
-                        <path d="M 450 330 L 450 310" 
-                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.6)" : "rgba(139, 92, 246, 0.5)"}
-                          strokeWidth="2.5" fill="none" markerEnd="url(#arrowhead)"/>
-                        <text x="470" y="315" textAnchor="start"
-                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">Mint SBX</text>
-                        
-                        {/* Arrows - Withdrawal Flow */}
-                        <path d="M 570 350 L 750 330" 
-                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.6)" : "rgba(139, 92, 246, 0.5)"}
-                          strokeWidth="2.5" fill="none" markerEnd="url(#arrowhead)"/>
-                        <text x="660" y="335" textAnchor="middle"
-                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">Withdraw</text>
-                        
-                        <path d="M 450 370 L 450 390" 
-                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.6)" : "rgba(139, 92, 246, 0.5)"}
-                          strokeWidth="2.5" fill="none" markerEnd="url(#arrowhead)"/>
-                        <text x="470" y="385" textAnchor="start"
-                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">Burn SBX</text>
-                        
-                        {/* Connections from currencies to pool */}
-                        <path d="M 450 200 L 450 230" 
-                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.4)" : "rgba(139, 92, 246, 0.3)"}
-                          strokeWidth="2" fill="none"/>
-                        <path d="M 250 350 L 330 350" 
-                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.4)" : "rgba(139, 92, 246, 0.3)"}
-                          strokeWidth="2" fill="none"/>
-                        <path d="M 450 500 L 450 470" 
-                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.4)" : "rgba(139, 92, 246, 0.3)"}
-                          strokeWidth="2" fill="none"/>
-                        <path d="M 650 350 L 570 350" 
-                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.4)" : "rgba(139, 92, 246, 0.3)"}
-                          strokeWidth="2" fill="none"/>
-                        
-                        {/* Asymmetric Withdrawal Rules */}
-                        <rect x="50" y="600" width="400" height="80" rx="8"
-                          fill={isDarkMode ? "rgba(88, 28, 135, 0.2)" : "rgba(139, 92, 246, 0.1)"}
-                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.5)" : "rgba(139, 92, 246, 0.3)"}
-                          strokeWidth="2"/>
-                        <text x="250" y="625" textAnchor="middle"
-                          fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="13" fontWeight="bold">Asymmetric Withdrawal Rules</text>
-                        <text x="70" y="650" textAnchor="start"
-                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="11">• Regional depositors: Can withdraw any regional OR USDC</text>
-                        <text x="70" y="670" textAnchor="start"
-                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="11">• USDC depositors: Can only withdraw regional stablecoins</text>
-                        
-                        {/* Unified APY */}
-                        <rect x="450" y="600" width="400" height="80" rx="8"
-                          fill={isDarkMode ? "rgba(88, 28, 135, 0.2)" : "rgba(139, 92, 246, 0.1)"}
-                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.5)" : "rgba(139, 92, 246, 0.3)"}
-                          strokeWidth="2"/>
-                        <text x="650" y="625" textAnchor="middle"
-                          fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="13" fontWeight="bold">Unified APY</text>
-                        <text x="470" y="650" textAnchor="start"
-                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="11">• All depositors earn same APY</text>
-                        <text x="470" y="670" textAnchor="start"
-                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="11">• Weighted average of all currency yields</text>
-                        
-                        {/* Arrow marker */}
-                        <defs>
-                          <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
-                            <polygon points="0 0, 10 3, 0 6" 
-                              fill={isDarkMode ? "rgba(139, 92, 246, 0.7)" : "rgba(139, 92, 246, 0.5)"}/>
-                          </marker>
-                        </defs>
-                      </svg>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            {/* Fee Structure Section */}
-            <section id="fee-structure" className="mb-16 scroll-mt-28">
-              <div className={sectionCardClass()}>
-                <h2 className={headingClass()}>Fee Structure</h2>
-                
-                <div className="mb-8">
-                  <h3 className={subHeadingClass()}>Three-Tier Fee System (80%/30% Thresholds)</h3>
-                  
-                  <div className="space-y-6 mb-6">
-                    <div className={cn(
-                      "rounded-lg p-6 border",
-                      isDarkMode 
-                        ? "bg-white/5 border-white/10"
-                        : "bg-gray-50 border-gray-200"
-                    )}>
-                      <h4 className={chartTitleClass()}>Tier 1: ≥80% Coverage</h4>
-                      <p className={cn(
-                        "text-sm mb-2",
-                        isDarkMode ? "text-zinc-300" : "text-gray-700"
-                      )}>
-                        Fixed cheap rate for stablecoins when pool has sufficient depth.
-                      </p>
-                      <p className={cn(
-                        "text-xs",
-                        isDarkMode ? "text-zinc-400" : "text-gray-600"
-                      )}>
-                        Fee = floor + base (no deviation penalty)<br/>
-                        Example: 7 bps (0.07%) - optimal for healthy pools
-                      </p>
-                    </div>
-
-                    <div className={cn(
-                      "rounded-lg p-6 border",
-                      isDarkMode 
-                        ? "bg-white/5 border-white/10"
-                        : "bg-gray-50 border-gray-200"
-                    )}>
-                      <h4 className={chartTitleClass()}>Tier 2: 30-80% Coverage</h4>
-                      <p className={cn(
-                        "text-sm mb-2",
-                        isDarkMode ? "text-zinc-300" : "text-gray-700"
-                      )}>
-                        Linear/pricewise fee that scales with deviation from target.
-                      </p>
-                      <p className={cn(
-                        "text-xs",
-                        isDarkMode ? "text-zinc-400" : "text-gray-600"
-                      )}>
-                        Fee = floor + base + k * deviation<br/>
-                        Example: 7-32 bps range
-                      </p>
-                    </div>
-
-                    <div className={cn(
-                      "rounded-lg p-6 border",
-                      isDarkMode 
-                        ? "bg-white/5 border-white/10"
-                        : "bg-gray-50 border-gray-200"
-                    )}>
-                      <h4 className={chartTitleClass()}>Tier 3: &lt;30% Coverage</h4>
-                      <p className={cn(
-                        "text-sm mb-2",
-                        isDarkMode ? "text-zinc-300" : "text-gray-700"
-                      )}>
-                        Sudden jump - dramatic fee increase to discourage draining.
-                      </p>
-                      <p className={cn(
-                        "text-xs",
-                        isDarkMode ? "text-zinc-400" : "text-gray-600"
-                      )}>
-                        Fee = (floor + base) * 10x + exponential term<br/>
-                        No cap - fees can exceed 14%+ to discourage draining<br/>
-                        Example: 77 bps at 29%, up to 1432 bps at 1%
-                      </p>
-                    </div>
-                  </div>
-                  
-                  {/* Chart 6: Three-Tier Fee Curve */}
-                  <div className="mb-6">
-                    <h4 className={chartTitleClass()}>Chart 6: Three-Tier Fee Curve</h4>
-                    <div className={cn(
-                      "rounded-lg p-4 border overflow-x-auto",
-                      isDarkMode 
-                        ? "bg-black/40 border-white/20"
-                        : "bg-gray-50 border-gray-300"
-                    )}>
-                      <svg viewBox="0 0 800 500" className="w-full h-auto">
-                        {/* Axes */}
-                        {/* Y-axis */}
-                        <line x1="80" y1="50" x2="80" y2="420"
-                          stroke={isDarkMode ? "rgba(255, 255, 255, 0.3)" : "rgba(0, 0, 0, 0.3)"}
-                          strokeWidth="2"/>
-                        {/* X-axis */}
-                        <line x1="80" y1="420" x2="750" y2="420"
-                          stroke={isDarkMode ? "rgba(255, 255, 255, 0.3)" : "rgba(0, 0, 0, 0.3)"}
-                          strokeWidth="2"/>
-                        
-                        {/* Y-axis labels - scaled to 1500 bps max */}
-                        <text x="40" y="425" textAnchor="middle"
-                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="11">0</text>
-                        <text x="40" y="385" textAnchor="middle"
-                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="11">300</text>
-                        <text x="40" y="345" textAnchor="middle"
-                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="11">600</text>
-                        <text x="40" y="305" textAnchor="middle"
-                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="11">900</text>
-                        <text x="40" y="265" textAnchor="middle"
-                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="11">1200</text>
-                        <text x="40" y="65" textAnchor="middle"
-                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="11">1500</text>
-                        <text x="20" y="240" textAnchor="middle"
-                          fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="12" fontWeight="bold" transform="rotate(-90, 20, 240)">Fee (bps)</text>
-                        
-                        {/* X-axis labels */}
-                        <text x="80" y="445" textAnchor="middle"
-                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="11">0%</text>
-                        <text x="200" y="445" textAnchor="middle"
-                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="11">20%</text>
-                        <text x="320" y="445" textAnchor="middle"
-                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="11">40%</text>
-                        <text x="440" y="445" textAnchor="middle"
-                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="11">60%</text>
-                        <text x="560" y="445" textAnchor="middle"
-                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="11">80%</text>
-                        <text x="680" y="445" textAnchor="middle"
-                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="11">100%</text>
-                        <text x="415" y="470" textAnchor="middle"
-                          fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="12" fontWeight="bold">Pool Coverage (%)</text>
-                        
-                        {/* Threshold lines */}
-                        {/* 30% threshold */}
-                        <line x1="272" y1="50" x2="272" y2="420"
-                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.4)" : "rgba(139, 92, 246, 0.3)"}
-                          strokeWidth="1.5" strokeDasharray="4,4"/>
-                        <text x="272" y="435" textAnchor="middle"
-                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10" fontWeight="bold">30%</text>
-                        
-                        {/* 80% threshold */}
-                        <line x1="584" y1="50" x2="584" y2="420"
-                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.4)" : "rgba(139, 92, 246, 0.3)"}
-                          strokeWidth="1.5" strokeDasharray="4,4"/>
-                        <text x="584" y="435" textAnchor="middle"
-                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10" fontWeight="bold">80%</text>
-                        
-                        {/* Fee Curve - Based on actual calculation mechanism */}
-                        {/* Formula: 
-                            Tier 1 (≥80%): fee = floor(5) + base(2) = 7 bps (flat)
-                            Tier 2 (30-80%): fee = floor + base + k*dev/10000 (linear, 7-32 bps)
-                            Tier 3 (<30%): fee = (floor+base)*10 + k*dev^2*5/(threshold*10000) (exponential, no cap)
-                        */}
-                        {/* Y-axis: 420 = 0 bps, 50 = 1500 bps. Formula: y = 420 - (bps/1500) * 370 */}
-                        {/* Key points: 7 bps @ 80% = y ~418, 32 bps @ 30% = y ~412, 77 bps @ 29% = y ~401, 1432 bps @ 1% = y ~66 */}
-                        
-                        {/* Tier 3: Exponential (<30%) - from 32 bps @ 30% to 1432 bps @ 1% */}
-                        {/* Calculated points based on formula: fee = (floor+base)*10 + k*dev^2*5/(threshold*10000) */}
-                        {/* Coverage → Fee: 30%→32bps(y=412), 29%→77bps(y=401), 25%→177bps(y=376), 20%→327bps(y=339), 15%→552bps(y=284), 10%→827bps(y=216), 5%→1152bps(y=136), 1%→1432bps(y=66) */}
-                        {/* X positions: 30%=272, 29%=274, 25%=248, 20%=214, 15%=181, 10%=147, 5%=114, 1%=87 */}
-                        {/* Using smooth cubic bezier curves to connect calculated points */}
-                        <path d="M 272 412 
-                                  C 273 406, 273 403, 274 401
-                                  C 271 398, 265 390, 248 376
-                                  C 230 360, 220 350, 214 339
-                                  C 205 325, 195 310, 181 284
-                                  C 170 265, 160 245, 147 216
-                                  C 135 190, 125 165, 114 136
-                                  C 105 110, 98 90, 87 66"
-                          fill="none"
-                          stroke={isDarkMode ? "rgba(239, 68, 68, 0.8)" : "rgba(220, 38, 38, 0.8)"}
-                          strokeWidth="3"/>
-                        
-                        {/* Tier 2: Linear (30-80%) - from 32 bps @ 30% to 7 bps @ 80% */}
-                        {/* Linear interpolation: 7 bps @ 80% (y=418), 32 bps @ 30% (y=412) */}
-                        <path d="M 272 412 L 584 418"
-                          fill="none"
-                          stroke={isDarkMode ? "rgba(251, 191, 36, 0.8)" : "rgba(217, 119, 6, 0.8)"}
-                          strokeWidth="3"/>
-                        
-                        {/* Tier 1: Flat (≥80%) - constant 7 bps */}
-                        <path d="M 584 418 L 750 418"
-                          fill="none"
-                          stroke={isDarkMode ? "rgba(34, 197, 94, 0.8)" : "rgba(22, 163, 74, 0.8)"}
-                          strokeWidth="3"/>
-                        
-                        {/* Tier Labels */}
-                        <rect x="600" y="60" width="140" height="100" rx="6"
-                          fill={isDarkMode ? "rgba(0, 0, 0, 0.4)" : "rgba(255, 255, 255, 0.8)"}
-                          stroke={isDarkMode ? "rgba(255, 255, 255, 0.2)" : "rgba(0, 0, 0, 0.2)"}
-                          strokeWidth="1"/>
-                        <text x="670" y="85" textAnchor="middle"
-                          fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="12" fontWeight="bold">Tiers</text>
-                        
-                        {/* Tier 1 */}
-                        <line x1="610" y1="105" x2="630" y2="105"
-                          stroke={isDarkMode ? "rgba(34, 197, 94, 0.8)" : "rgba(22, 163, 74, 0.8)"}
-                          strokeWidth="3"/>
-                        <text x="640" y="110" textAnchor="start"
-                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">Tier 1: ≥80% (7 bps)</text>
-                        
-                        {/* Tier 2 */}
-                        <line x1="610" y1="125" x2="630" y2="125"
-                          stroke={isDarkMode ? "rgba(251, 191, 36, 0.8)" : "rgba(217, 119, 6, 0.8)"}
-                          strokeWidth="3"/>
-                        <text x="640" y="130" textAnchor="start"
-                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">Tier 2: 30-80% (7-32 bps)</text>
-                        
-                        {/* Tier 3 */}
-                        <line x1="610" y1="145" x2="630" y2="145"
-                          stroke={isDarkMode ? "rgba(239, 68, 68, 0.8)" : "rgba(220, 38, 38, 0.8)"}
-                          strokeWidth="3"/>
-                        <text x="640" y="150" textAnchor="start"
-                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">Tier 3: &lt;30% (exponential)</text>
-                        
-                        {/* Example points - based on actual calculation values */}
-                        {/* 7 bps @ 80%: y = 420 - (7/1500) * 370 ≈ 418 */}
-                        <circle cx="584" cy="418" r="4"
-                          fill={isDarkMode ? "#fff" : "#1f2937"}
-                          stroke={isDarkMode ? "rgba(34, 197, 94, 0.8)" : "rgba(22, 163, 74, 0.8)"}
-                          strokeWidth="2"/>
-                        <text x="595" y="413" textAnchor="start"
-                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="9">7 bps @ 80%</text>
-                        
-                        {/* 32 bps @ 30%: y = 420 - (32/1500) * 370 ≈ 412 */}
-                        <circle cx="272" cy="412" r="4"
-                          fill={isDarkMode ? "#fff" : "#1f2937"}
-                          stroke={isDarkMode ? "rgba(251, 191, 36, 0.8)" : "rgba(217, 119, 6, 0.8)"}
-                          strokeWidth="2"/>
-                        <text x="285" y="407" textAnchor="start"
-                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="9">32 bps @ 30%</text>
-                        
-                        {/* 77 bps @ 29%: y = 420 - (77/1500) * 370 ≈ 401 */}
-                        <circle cx="268" cy="401" r="4"
-                          fill={isDarkMode ? "#fff" : "#1f2937"}
-                          stroke={isDarkMode ? "rgba(239, 68, 68, 0.8)" : "rgba(220, 38, 38, 0.8)"}
-                          strokeWidth="2"/>
-                        <text x="280" y="396" textAnchor="start"
-                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="9">77 bps @ 29%</text>
-                        
-                        {/* 1432 bps @ 1%: y = 420 - (1432/1500) * 370 ≈ 66 */}
-                        <circle cx="87" cy="66" r="4"
-                          fill={isDarkMode ? "#fff" : "#1f2937"}
-                          stroke={isDarkMode ? "rgba(239, 68, 68, 0.8)" : "rgba(220, 38, 38, 0.8)"}
-                          strokeWidth="2"/>
-                        <text x="100" y="61" textAnchor="start"
-                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="9">1432 bps @ 1%</text>
-                      </svg>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            {/* Swapping Mechanism Section */}
-            <section id="swapping" className="mb-16 scroll-mt-28">
-              <div className={sectionCardClass()}>
-                <h2 className={headingClass()}>Swapping Mechanism</h2>
-                
-                <div className="mb-8">
-                  <h3 className={subHeadingClass()}>Direct A→B Swaps (Infinity Pool Core)</h3>
-                  <p className={textClass()}>
-                    Unlike traditional DEXs that require routing through intermediate tokens, StableX enables direct swaps 
-                    between any two regional stablecoins. This is the core of the infinity pool concept.
-                  </p>
-                  <ul className={listTextClass()}>
-                    <li>• <strong className={strongClass()}>No USD intermediate</strong> - direct exchange between regional stablecoins</li>
-                    <li>• <strong className={strongClass()}>Rate calculation:</strong> rate_A_to_B = price_B / price_A (both in USD/[CURRENCY] format)</li>
-                    <li>• <strong className={strongClass()}>Single fee applied</strong> based on target asset depth</li>
-                    <li>• <strong className={strongClass()}>True infinity pool mechanics</strong> - all assets in one unified pool</li>
-                    <li>• <strong className={strongClass()}>Prices passed as parameters</strong> - queried from API off-chain before transaction</li>
-                  </ul>
-                  
-                  {/* Chart 7: Direct A→B Swap Flow */}
-                  <div className="mb-6">
-                    <h4 className={chartTitleClass()}>Chart 7: Direct A→B Swap Flow</h4>
-                    <div className={cn(
-                      "rounded-lg p-4 border overflow-x-auto",
-                      isDarkMode 
-                        ? "bg-black/40 border-white/20"
-                        : "bg-gray-50 border-gray-300"
-                    )}>
-                      <svg viewBox="0 0 900 500" className="w-full h-auto">
-                        {/* User */}
-                        <rect x="50" y="200" width="120" height="60" rx="8"
-                          fill={isDarkMode ? "rgba(139, 92, 246, 0.2)" : "rgba(139, 92, 246, 0.1)"}
-                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.5)" : "rgba(139, 92, 246, 0.3)"}
-                          strokeWidth="2"/>
-                        <text x="110" y="225" textAnchor="middle"
-                          fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="12" fontWeight="bold">User</text>
-                        <text x="110" y="245" textAnchor="middle"
-                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">Wants to swap</text>
-                        
-                        {/* Currency A */}
-                        <rect x="50" y="50" width="120" height="60" rx="8"
-                          fill={isDarkMode ? "rgba(139, 92, 246, 0.25)" : "rgba(139, 92, 246, 0.12)"}
-                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.6)" : "rgba(139, 92, 246, 0.4)"}
-                          strokeWidth="2"/>
-                        <text x="110" y="75" textAnchor="middle"
-                          fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="13" fontWeight="bold">Currency A</text>
-                        <text x="110" y="95" textAnchor="middle"
-                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">e.g., CHFX</text>
-                        
-                        {/* Price Feed API */}
-                        <rect x="750" y="50" width="100" height="60" rx="8"
-                          fill={isDarkMode ? "rgba(139, 92, 246, 0.2)" : "rgba(139, 92, 246, 0.1)"}
-                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.5)" : "rgba(139, 92, 246, 0.3)"}
-                          strokeWidth="2"/>
-                        <text x="800" y="75" textAnchor="middle"
-                          fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="12" fontWeight="bold">Price API</text>
-                        <text x="800" y="95" textAnchor="middle"
-                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">Off-Chain</text>
-                        
-                        {/* Pool */}
-                        <rect x="350" y="150" width="200" height="180" rx="10"
-                          fill={isDarkMode ? "rgba(75, 20, 120, 0.3)" : "rgba(139, 92, 246, 0.15)"}
-                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.7)" : "rgba(139, 92, 246, 0.5)"}
-                          strokeWidth="3"/>
-                        <text x="450" y="180" textAnchor="middle"
-                          fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="14" fontWeight="bold">Unified Pool</text>
-                        <text x="450" y="205" textAnchor="middle"
-                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="11">All Currencies</text>
-                        <text x="450" y="230" textAnchor="middle"
-                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">USDC + CHFX + TRYB + SEKX</text>
-                        
-                        {/* Pool Balance Box */}
-                        <rect x="370" y="250" width="160" height="60" rx="6"
-                          fill={isDarkMode ? "rgba(139, 92, 246, 0.15)" : "rgba(139, 92, 246, 0.08)"}
-                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.4)" : "rgba(139, 92, 246, 0.25)"}
-                          strokeWidth="1.5"/>
-                        <text x="450" y="270" textAnchor="middle"
-                          fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="10" fontWeight="bold">Pool Balance</text>
-                        <text x="450" y="290" textAnchor="middle"
-                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="9">Updates after swap</text>
-                        <text x="450" y="305" textAnchor="middle"
-                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="9">Fee calculated</text>
-                        
-                        {/* Currency B */}
-                        <rect x="750" y="200" width="120" height="60" rx="8"
-                          fill={isDarkMode ? "rgba(139, 92, 246, 0.25)" : "rgba(139, 92, 246, 0.12)"}
-                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.6)" : "rgba(139, 92, 246, 0.4)"}
-                          strokeWidth="2"/>
-                        <text x="810" y="225" textAnchor="middle"
-                          fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="13" fontWeight="bold">Currency B</text>
-                        <text x="810" y="245" textAnchor="middle"
-                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">e.g., TRYB</text>
-                        
-                        {/* Steps */}
-                        <g id="steps">
-                          {/* Step 1 */}
-                          <circle cx="200" cy="80" r="15"
-                            fill={isDarkMode ? "rgba(139, 92, 246, 0.8)" : "rgba(139, 92, 246, 0.6)"}
-                            stroke={isDarkMode ? "#fff" : "#1f2937"} strokeWidth="2"/>
-                          <text x="200" y="86" textAnchor="middle"
-                            fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="11" fontWeight="bold">1</text>
-                          <text x="200" y="110" textAnchor="middle"
-                            fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">User sends</text>
-                          <text x="200" y="125" textAnchor="middle"
-                            fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">Currency A</text>
-                          
-                          {/* Step 2 */}
-                          <circle cx="200" cy="230" r="15"
-                            fill={isDarkMode ? "rgba(139, 92, 246, 0.8)" : "rgba(139, 92, 246, 0.6)"}
-                            stroke={isDarkMode ? "#fff" : "#1f2937"} strokeWidth="2"/>
-                          <text x="200" y="236" textAnchor="middle"
-                            fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="11" fontWeight="bold">2</text>
-                          <text x="200" y="260" textAnchor="middle"
-                            fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">Query prices</text>
-                          
-                          {/* Step 3 */}
-                          <circle cx="450" cy="100" r="15"
-                            fill={isDarkMode ? "rgba(139, 92, 246, 0.8)" : "rgba(139, 92, 246, 0.6)"}
-                            stroke={isDarkMode ? "#fff" : "#1f2937"} strokeWidth="2"/>
-                          <text x="450" y="106" textAnchor="middle"
-                            fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="11" fontWeight="bold">3</text>
-                          <text x="450" y="130" textAnchor="middle"
-                            fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">Calculate rate</text>
-                          <text x="450" y="145" textAnchor="middle"
-                            fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="9">rate = price_B / price_A</text>
-                          
-                          {/* Step 4 */}
-                          <circle cx="450" cy="350" r="15"
-                            fill={isDarkMode ? "rgba(139, 92, 246, 0.8)" : "rgba(139, 92, 246, 0.6)"}
-                            stroke={isDarkMode ? "#fff" : "#1f2937"} strokeWidth="2"/>
-                          <text x="450" y="356" textAnchor="middle"
-                            fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="11" fontWeight="bold">4</text>
-                          <text x="450" y="380" textAnchor="middle"
-                            fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">Calculate fee</text>
-                          <text x="450" y="395" textAnchor="middle"
-                            fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="9">Based on pool depth</text>
-                          
-                          {/* Step 5 */}
-                          <circle cx="700" cy="230" r="15"
-                            fill={isDarkMode ? "rgba(139, 92, 246, 0.8)" : "rgba(139, 92, 246, 0.6)"}
-                            stroke={isDarkMode ? "#fff" : "#1f2937"} strokeWidth="2"/>
-                          <text x="700" y="236" textAnchor="middle"
-                            fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="11" fontWeight="bold">5</text>
-                          <text x="700" y="260" textAnchor="middle"
-                            fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">Direct transfer</text>
-                          <text x="700" y="275" textAnchor="middle"
-                            fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="9">No intermediate</text>
-                        </g>
-                        
-                        {/* Arrows */}
-                        {/* Step 1: User sends Currency A */}
-                        <path d="M 170 80 L 350 180" 
-                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.6)" : "rgba(139, 92, 246, 0.5)"}
-                          strokeWidth="2.5" fill="none" markerEnd="url(#arrowhead)"/>
-                        <text x="250" y="120" textAnchor="middle"
-                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="9">Send A</text>
-                        
-                        {/* Step 2: Query prices */}
-                        <path d="M 110 230 Q 400 150 750 80" 
-                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.4)" : "rgba(139, 92, 246, 0.3)"}
-                          strokeWidth="1.5" fill="none" strokeDasharray="4,4" markerEnd="url(#arrowhead)"/>
-                        <text x="430" y="100" textAnchor="middle"
-                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="9">Query prices</text>
-                        
-                        {/* Step 3: Prices to pool */}
-                        <path d="M 800 110 L 600 150" 
-                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.4)" : "rgba(139, 92, 246, 0.3)"}
-                          strokeWidth="1.5" fill="none" strokeDasharray="4,4" markerEnd="url(#arrowhead)"/>
-                        <text x="700" y="125" textAnchor="middle"
-                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="9">Price params</text>
-                        
-                        {/* Step 4: Pool calculates */}
-                        <path d="M 450 330 L 450 300" 
-                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.5)" : "rgba(139, 92, 246, 0.4)"}
-                          strokeWidth="2" fill="none"/>
-                        
-                        {/* Step 5: Pool sends Currency B */}
-                        <path d="M 550 240 L 750 230" 
-                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.6)" : "rgba(139, 92, 246, 0.5)"}
-                          strokeWidth="2.5" fill="none" markerEnd="url(#arrowhead)"/>
-                        <text x="650" y="230" textAnchor="middle"
-                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="9">Receive B</text>
-                        
-                        {/* No Intermediate Label */}
-                        <rect x="300" y="400" width="300" height="50" rx="6"
-                          fill={isDarkMode ? "rgba(88, 28, 135, 0.3)" : "rgba(139, 92, 246, 0.15)"}
-                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.6)" : "rgba(139, 92, 246, 0.4)"}
-                          strokeWidth="2"/>
-                        <text x="450" y="425" textAnchor="middle"
-                          fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="13" fontWeight="bold">Direct A→B Swap</text>
-                        <text x="450" y="445" textAnchor="middle"
-                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">No intermediate token required</text>
-                        
-                        {/* Arrow marker */}
-                        <defs>
-                          <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
-                            <polygon points="0 0, 10 3, 0 6" 
-                              fill={isDarkMode ? "rgba(139, 92, 246, 0.7)" : "rgba(139, 92, 246, 0.5)"}/>
-                          </marker>
-                        </defs>
-                      </svg>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </section>
-
             {/* Cross-Chain Bridge Section */}
             <section id="bridging" className="mb-16 scroll-mt-28">
               <div className={sectionCardClass()}>
@@ -2434,27 +2468,42 @@ export default function Whitepaper() {
               </div>
             </section>
 
-            {/* Price Feed Architecture Section */}
-            <section id="price-feeds" className="mb-16 scroll-mt-28">
+            {/* Multi-Chain Architecture Section */}
+            <section id="multi-chain" className="mb-16 scroll-mt-28">
               <div className={sectionCardClass()}>
-                <h2 className={headingClass()}>Price Feed Architecture</h2>
+                <h2 className={headingClass()}>Multi-Chain Architecture</h2>
                 
                 <div className="mb-8">
-                  <h3 className={subHeadingClass()}>API-Based Price Feeds</h3>
-                  <p className={textClass()}>
-                    Prices are queried off-chain via API and passed as parameters to contract functions. This approach 
-                    provides better flexibility and lower gas costs compared to on-chain oracle queries.
-                  </p>
+                  <h3 className={subHeadingClass()}>L1 Components (Move-based)</h3>
                   <ul className={listTextClass()}>
-                    <li>• <strong className={strongClass()}>No Onchain Queries:</strong> Removed dependency on Pyth Network onchain queries</li>
-                    <li>• <strong className={strongClass()}>Price Format:</strong> All prices in micro-USD (1e6 = $1.00)</li>
-                    <li>• <strong className={strongClass()}>Off-Chain Queries:</strong> Frontend queries API before submitting transactions</li>
-                    <li>• <strong className={strongClass()}>Parameter Passing:</strong> Prices passed as function parameters</li>
+                    <li>• <strong className={strongClass()}>Native tokens:</strong> CHFX, TRYB, SEKX, USDC, SBX</li>
+                    <li>• <strong className={strongClass()}>Pool contract:</strong> sbx_pool.move</li>
+                    <li>• <strong className={strongClass()}>Bridge contract:</strong> bridge_l1.move (locks/unlocks tokens)</li>
+                    <li>• <strong className={strongClass()}>Flash vault:</strong> flash_vault.move</li>
+                    <li>• <strong className={strongClass()}>Shared objects:</strong> Pool and Registry created as shared objects</li>
                   </ul>
+                </div>
+
+                <div className="mb-8">
+                  <h3 className={subHeadingClass()}>EVM Components (Solidity-based)</h3>
+                  <ul className={listTextClass()}>
+                    <li>• <strong className={strongClass()}>ERC-20 tokens:</strong> CHFX, TRYB, SEKX, USDC, wSBX (wrapped SBX)</li>
+                    <li>• <strong className={strongClass()}>Pool contract:</strong> StableXPool.sol</li>
+                    <li>• <strong className={strongClass()}>Bridge contract:</strong> EVMBridge.sol (mints/burns wrapped tokens)</li>
+                    <li>• <strong className={strongClass()}>Standard ERC-20:</strong> All tokens follow ERC-20 standard</li>
+                  </ul>
+                </div>
+
+                <div className="mb-8">
+                  <h3 className={subHeadingClass()}>Unified Liquidity</h3>
+                  <p className={textClass()}>
+                    While pools exist separately on L1 and EVM, they are bridged via cross-chain transfers, 
+                    allowing users to access liquidity from either chain seamlessly.
+                  </p>
                   
-                  {/* Chart 9: Price Feed Architecture */}
+                  {/* Chart 4: Multi-Chain Architecture */}
                   <div className="mb-6">
-                    <h4 className={chartTitleClass()}>Chart 9: Price Feed Architecture</h4>
+                    <h4 className={chartTitleClass()}>Chart 4: Multi-Chain Architecture</h4>
                     <div className={cn(
                       "rounded-lg p-4 border overflow-x-auto",
                       isDarkMode 
@@ -2462,184 +2511,161 @@ export default function Whitepaper() {
                         : "bg-gray-50 border-gray-300"
                     )}>
                       <svg viewBox="0 0 900 600" className="w-full h-auto">
-                        {/* Price API */}
-                        <rect x="50" y="50" width="200" height="100" rx="10"
-                          fill={isDarkMode ? "rgba(139, 92, 246, 0.25)" : "rgba(139, 92, 246, 0.12)"}
-                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.7)" : "rgba(139, 92, 246, 0.5)"}
-                          strokeWidth="3"/>
-                        <text x="150" y="80" textAnchor="middle"
-                          fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="15" fontWeight="bold">Price Feed API</text>
-                        <text x="150" y="105" textAnchor="middle"
-                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="11">Off-Chain Service</text>
-                        <text x="150" y="125" textAnchor="middle"
-                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">External Data Source</text>
-                        <text x="150" y="140" textAnchor="middle"
-                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="9">Real-time prices</text>
-                        
-                        {/* Frontend */}
-                        <rect x="350" y="50" width="200" height="150" rx="10"
-                          fill={isDarkMode ? "rgba(75, 20, 120, 0.3)" : "rgba(139, 92, 246, 0.15)"}
-                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.7)" : "rgba(139, 92, 246, 0.5)"}
-                          strokeWidth="3"/>
-                        <text x="450" y="80" textAnchor="middle"
-                          fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="15" fontWeight="bold">Frontend</text>
-                        <text x="450" y="105" textAnchor="middle"
-                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="11">User Interface</text>
-                        
-                        {/* Price Fetching Box */}
-                        <rect x="370" y="120" width="160" height="50" rx="6"
-                          fill={isDarkMode ? "rgba(139, 92, 246, 0.2)" : "rgba(139, 92, 246, 0.1)"}
-                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.5)" : "rgba(139, 92, 246, 0.3)"}
-                          strokeWidth="1.5"/>
-                        <text x="450" y="140" textAnchor="middle"
-                          fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="10" fontWeight="bold">Price Fetching</text>
-                        <text x="450" y="160" textAnchor="middle"
-                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="9">HTTP GET request</text>
-                        
-                        {/* Price Format Box */}
-                        <rect x="370" y="180" width="160" height="50" rx="6"
-                          fill={isDarkMode ? "rgba(139, 92, 246, 0.2)" : "rgba(139, 92, 246, 0.1)"}
-                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.5)" : "rgba(139, 92, 246, 0.3)"}
-                          strokeWidth="1.5"/>
-                        <text x="450" y="200" textAnchor="middle"
-                          fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="10" fontWeight="bold">Format Conversion</text>
-                        <text x="450" y="220" textAnchor="middle"
-                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="9">Convert to micro-USD</text>
-                        
-                        {/* Smart Contract */}
-                        <rect x="650" y="50" width="200" height="150" rx="10"
-                          fill={isDarkMode ? "rgba(75, 20, 120, 0.3)" : "rgba(139, 92, 246, 0.15)"}
-                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.7)" : "rgba(139, 92, 246, 0.5)"}
-                          strokeWidth="3"/>
-                        <text x="750" y="80" textAnchor="middle"
-                          fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="15" fontWeight="bold">Smart Contract</text>
-                        <text x="750" y="105" textAnchor="middle"
-                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="11">Pool / Bridge</text>
-                        
-                        {/* Function Parameters Box */}
-                        <rect x="670" y="120" width="160" height="50" rx="6"
-                          fill={isDarkMode ? "rgba(139, 92, 246, 0.2)" : "rgba(139, 92, 246, 0.1)"}
-                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.5)" : "rgba(139, 92, 246, 0.3)"}
-                          strokeWidth="1.5"/>
-                        <text x="750" y="140" textAnchor="middle"
-                          fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="10" fontWeight="bold">Function Parameters</text>
-                        <text x="750" y="160" textAnchor="middle"
-                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="9">Prices as params</text>
-                        
-                        {/* Flow Steps */}
-                        <g id="flow-steps">
-                          {/* Step 1 */}
-                          <circle cx="150" cy="250" r="15"
-                            fill={isDarkMode ? "rgba(139, 92, 246, 0.8)" : "rgba(139, 92, 246, 0.6)"}
-                            stroke={isDarkMode ? "#fff" : "#1f2937"} strokeWidth="2"/>
-                          <text x="150" y="256" textAnchor="middle"
-                            fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="11" fontWeight="bold">1</text>
-                          <text x="150" y="280" textAnchor="middle"
-                            fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">User initiates</text>
-                          <text x="150" y="295" textAnchor="middle"
-                            fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="9">transaction</text>
+                        {/* L1 Layer */}
+                        <g id="l1-layer">
+                          <rect x="50" y="50" width="350" height="500" rx="12"
+                            fill={isDarkMode ? "rgba(75, 20, 120, 0.2)" : "rgba(139, 92, 246, 0.08)"}
+                            stroke={isDarkMode ? "rgba(139, 92, 246, 0.6)" : "rgba(139, 92, 246, 0.4)"}
+                            strokeWidth="3"/>
+                          <text x="225" y="80" textAnchor="middle"
+                            fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="18" fontWeight="bold">IOTA L1</text>
+                          <text x="225" y="100" textAnchor="middle"
+                            fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="12">Move-based Contracts</text>
                           
-                          {/* Step 2 */}
-                          <circle cx="450" cy="250" r="15"
-                            fill={isDarkMode ? "rgba(139, 92, 246, 0.8)" : "rgba(139, 92, 246, 0.6)"}
-                            stroke={isDarkMode ? "#fff" : "#1f2937"} strokeWidth="2"/>
-                          <text x="450" y="256" textAnchor="middle"
-                            fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="11" fontWeight="bold">2</text>
-                          <text x="450" y="280" textAnchor="middle"
-                            fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">Frontend queries</text>
-                          <text x="450" y="295" textAnchor="middle"
-                            fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="9">Price API</text>
+                          {/* L1 Pool */}
+                          <rect x="100" y="140" width="300" height="100" rx="8"
+                            fill={isDarkMode ? "rgba(139, 92, 246, 0.2)" : "rgba(139, 92, 246, 0.1)"}
+                            stroke={isDarkMode ? "rgba(139, 92, 246, 0.6)" : "rgba(139, 92, 246, 0.4)"}
+                            strokeWidth="2"/>
+                          <text x="250" y="170" textAnchor="middle"
+                            fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="13" fontWeight="bold">sbx_pool.move</text>
+                          <text x="150" y="200" textAnchor="start"
+                            fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">• Unified basket</text>
+                          <text x="150" y="220" textAnchor="start"
+                            fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">• Shared object</text>
                           
-                          {/* Step 3 */}
-                          <circle cx="750" cy="250" r="15"
-                            fill={isDarkMode ? "rgba(139, 92, 246, 0.8)" : "rgba(139, 92, 246, 0.6)"}
-                            stroke={isDarkMode ? "#fff" : "#1f2937"} strokeWidth="2"/>
-                          <text x="750" y="256" textAnchor="middle"
-                            fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="11" fontWeight="bold">3</text>
-                          <text x="750" y="280" textAnchor="middle"
-                            fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">Submit transaction</text>
-                          <text x="750" y="295" textAnchor="middle"
-                            fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="9">with prices</text>
+                          {/* L1 Bridge */}
+                          <rect x="100" y="260" width="300" height="80" rx="8"
+                            fill={isDarkMode ? "rgba(139, 92, 246, 0.2)" : "rgba(139, 92, 246, 0.1)"}
+                            stroke={isDarkMode ? "rgba(139, 92, 246, 0.6)" : "rgba(139, 92, 246, 0.4)"}
+                            strokeWidth="2"/>
+                          <text x="250" y="285" textAnchor="middle"
+                            fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="13" fontWeight="bold">bridge_l1.move</text>
+                          <text x="150" y="310" textAnchor="start"
+                            fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">• Lock/Unlock tokens</text>
+                          <text x="150" y="330" textAnchor="start"
+                            fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">• Emit events</text>
+                          
+                          {/* L1 Tokens */}
+                          <rect x="100" y="360" width="300" height="120" rx="8"
+                            fill={isDarkMode ? "rgba(139, 92, 246, 0.15)" : "rgba(139, 92, 246, 0.08)"}
+                            stroke={isDarkMode ? "rgba(139, 92, 246, 0.5)" : "rgba(139, 92, 246, 0.3)"}
+                            strokeWidth="2"/>
+                          <text x="250" y="385" textAnchor="middle"
+                            fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="13" fontWeight="bold">Native Tokens</text>
+                          <text x="150" y="410" textAnchor="start"
+                            fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">• USDC</text>
+                          <text x="150" y="430" textAnchor="start"
+                            fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">• CHFX, TRYB, SEKX</text>
+                          <text x="150" y="450" textAnchor="start"
+                            fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">• SBX</text>
+                          <text x="150" y="470" textAnchor="start"
+                            fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">• Flash vault</text>
                         </g>
                         
-                        {/* Arrows */}
-                        {/* Step 1 to 2 */}
-                        <path d="M 165 250 L 435 250" 
-                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.6)" : "rgba(139, 92, 246, 0.5)"}
-                          strokeWidth="2.5" fill="none" markerEnd="url(#arrowhead)"/>
-                        <text x="300" y="245" textAnchor="middle"
-                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="9">User action</text>
+                        {/* EVM Layer */}
+                        <g id="evm-layer">
+                          <rect x="500" y="50" width="350" height="500" rx="12"
+                            fill={isDarkMode ? "rgba(75, 20, 120, 0.2)" : "rgba(139, 92, 246, 0.08)"}
+                            stroke={isDarkMode ? "rgba(139, 92, 246, 0.6)" : "rgba(139, 92, 246, 0.4)"}
+                            strokeWidth="3"/>
+                          <text x="675" y="80" textAnchor="middle"
+                            fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="18" fontWeight="bold">IOTA EVM</text>
+                          <text x="675" y="100" textAnchor="middle"
+                            fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="12">Solidity-based Contracts</text>
+                          
+                          {/* EVM Pool */}
+                          <rect x="550" y="140" width="250" height="100" rx="8"
+                            fill={isDarkMode ? "rgba(139, 92, 246, 0.2)" : "rgba(139, 92, 246, 0.1)"}
+                            stroke={isDarkMode ? "rgba(139, 92, 246, 0.6)" : "rgba(139, 92, 246, 0.4)"}
+                            strokeWidth="2"/>
+                          <text x="675" y="170" textAnchor="middle"
+                            fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="13" fontWeight="bold">StableXPool.sol</text>
+                          <text x="570" y="200" textAnchor="start"
+                            fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">• Unified basket</text>
+                          <text x="570" y="220" textAnchor="start"
+                            fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">• Standard contract</text>
+                          
+                          {/* EVM Bridge */}
+                          <rect x="550" y="260" width="250" height="80" rx="8"
+                            fill={isDarkMode ? "rgba(139, 92, 246, 0.2)" : "rgba(139, 92, 246, 0.1)"}
+                            stroke={isDarkMode ? "rgba(139, 92, 246, 0.6)" : "rgba(139, 92, 246, 0.4)"}
+                            strokeWidth="2"/>
+                          <text x="675" y="285" textAnchor="middle"
+                            fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="13" fontWeight="bold">EVMBridge.sol</text>
+                          <text x="570" y="310" textAnchor="start"
+                            fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">• Mint/Burn wrapped tokens</text>
+                          <text x="570" y="330" textAnchor="start"
+                            fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">• Emit events</text>
+                          
+                          {/* EVM Tokens */}
+                          <rect x="550" y="360" width="250" height="120" rx="8"
+                            fill={isDarkMode ? "rgba(139, 92, 246, 0.15)" : "rgba(139, 92, 246, 0.08)"}
+                            stroke={isDarkMode ? "rgba(139, 92, 246, 0.5)" : "rgba(139, 92, 246, 0.3)"}
+                            strokeWidth="2"/>
+                          <text x="675" y="385" textAnchor="middle"
+                            fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="13" fontWeight="bold">ERC-20 Tokens</text>
+                          <text x="570" y="410" textAnchor="start"
+                            fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">• USDC</text>
+                          <text x="570" y="430" textAnchor="start"
+                            fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">• CHFX, TRYB, SEKX</text>
+                          <text x="570" y="450" textAnchor="start"
+                            fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">• wSBX (wrapped SBX)</text>
+                          <text x="570" y="470" textAnchor="start"
+                            fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">• Standard ERC-20</text>
+                        </g>
                         
-                        {/* Step 2: Frontend to API */}
-                        <path d="M 350 125 Q 250 200 150 150" 
-                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.5)" : "rgba(139, 92, 246, 0.4)"}
-                          strokeWidth="2" fill="none" strokeDasharray="4,4" markerEnd="url(#arrowhead)"/>
-                        <text x="250" y="130" textAnchor="middle"
-                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="9">HTTP GET</text>
+                        {/* Bridge Connection */}
+                        <g id="bridge-connection">
+                          {/* Bridge Arrow L1 → EVM */}
+                          <path d="M 400 300 Q 450 300 500 300" 
+                            stroke={isDarkMode ? "rgba(139, 92, 246, 0.7)" : "rgba(139, 92, 246, 0.6)"}
+                            strokeWidth="4" fill="none" markerEnd="url(#arrowhead-large)"/>
+                          <text x="450" y="290" textAnchor="middle"
+                            fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="12" fontWeight="bold">Bridge</text>
+                          
+                          {/* Lock → Mint */}
+                          <rect x="400" y="320" width="100" height="40" rx="6"
+                            fill={isDarkMode ? "rgba(88, 28, 135, 0.3)" : "rgba(139, 92, 246, 0.15)"}
+                            stroke={isDarkMode ? "rgba(139, 92, 246, 0.6)" : "rgba(139, 92, 246, 0.4)"}
+                            strokeWidth="1.5"/>
+                          <text x="450" y="340" textAnchor="middle"
+                            fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="10" fontWeight="bold">Lock → Mint</text>
+                          <text x="450" y="355" textAnchor="middle"
+                            fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="9">L1 → EVM</text>
+                          
+                          {/* Burn → Unlock */}
+                          <rect x="400" y="380" width="100" height="40" rx="6"
+                            fill={isDarkMode ? "rgba(88, 28, 135, 0.3)" : "rgba(139, 92, 246, 0.15)"}
+                            stroke={isDarkMode ? "rgba(139, 92, 246, 0.6)" : "rgba(139, 92, 246, 0.4)"}
+                            strokeWidth="1.5"/>
+                          <text x="450" y="400" textAnchor="middle"
+                            fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="10" fontWeight="bold">Burn → Unlock</text>
+                          <text x="450" y="415" textAnchor="middle"
+                            fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="9">EVM → L1</text>
+                          
+                          {/* Relayer */}
+                          <ellipse cx="450" cy="480" rx="60" ry="35"
+                            fill={isDarkMode ? "rgba(88, 28, 135, 0.4)" : "rgba(139, 92, 246, 0.2)"}
+                            stroke={isDarkMode ? "rgba(139, 92, 246, 0.8)" : "rgba(139, 92, 246, 0.6)"}
+                            strokeWidth="2"/>
+                          <text x="450" y="475" textAnchor="middle"
+                            fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="11" fontWeight="bold">Relayer</text>
+                          <text x="450" y="490" textAnchor="middle"
+                            fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="9">Event Watcher</text>
+                        </g>
                         
-                        {/* Step 2: API to Frontend */}
-                        <path d="M 250 150 Q 300 100 350 125" 
-                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.5)" : "rgba(139, 92, 246, 0.4)"}
-                          strokeWidth="2" fill="none" strokeDasharray="4,4" markerEnd="url(#arrowhead)"/>
-                        <text x="300" y="110" textAnchor="middle"
-                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="9">Price data</text>
+                        {/* Unified Liquidity Label */}
+                        <text x="450" y="550" textAnchor="middle"
+                          fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="14" fontWeight="bold">Unified Liquidity</text>
+                        <text x="450" y="570" textAnchor="middle"
+                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="11">Seamless access across both chains</text>
                         
-                        {/* Step 2 to 3 */}
-                        <path d="M 550 250 L 735 250" 
-                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.6)" : "rgba(139, 92, 246, 0.5)"}
-                          strokeWidth="2.5" fill="none" markerEnd="url(#arrowhead)"/>
-                        <text x="640" y="245" textAnchor="middle"
-                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="9">Transaction</text>
-                        
-                        {/* Price Format Details */}
-                        <rect x="50" y="350" width="400" height="120" rx="8"
-                          fill={isDarkMode ? "rgba(88, 28, 135, 0.2)" : "rgba(139, 92, 246, 0.1)"}
-                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.5)" : "rgba(139, 92, 246, 0.3)"}
-                          strokeWidth="2"/>
-                        <text x="250" y="375" textAnchor="middle"
-                          fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="13" fontWeight="bold">Price Format: Micro-USD</text>
-                        <text x="70" y="400" textAnchor="start"
-                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="11">• 1 micro-USD = 1,000,000 (1e6)</text>
-                        <text x="70" y="420" textAnchor="start"
-                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="11">• $1.00 = 1,000,000 micro-USD</text>
-                        <text x="70" y="440" textAnchor="start"
-                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="11">• All prices converted before passing to contract</text>
-                        <text x="70" y="460" textAnchor="start"
-                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="11">• No on-chain oracle queries required</text>
-                        
-                        {/* Benefits */}
-                        <rect x="450" y="350" width="400" height="120" rx="8"
-                          fill={isDarkMode ? "rgba(88, 28, 135, 0.2)" : "rgba(139, 92, 246, 0.1)"}
-                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.5)" : "rgba(139, 92, 246, 0.3)"}
-                          strokeWidth="2"/>
-                        <text x="650" y="375" textAnchor="middle"
-                          fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="13" fontWeight="bold">Benefits</text>
-                        <text x="470" y="400" textAnchor="start"
-                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="11">• Lower gas costs (no on-chain queries)</text>
-                        <text x="470" y="420" textAnchor="start"
-                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="11">• Better flexibility (multiple data sources)</text>
-                        <text x="470" y="440" textAnchor="start"
-                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="11">• Faster transaction processing</text>
-                        <text x="470" y="460" textAnchor="start"
-                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="11">• Reduced dependency on oracle networks</text>
-                        
-                        {/* Example Transaction */}
-                        <rect x="200" y="500" width="500" height="80" rx="8"
-                          fill={isDarkMode ? "rgba(0, 0, 0, 0.3)" : "rgba(255, 255, 255, 0.5)"}
-                          stroke={isDarkMode ? "rgba(139, 92, 246, 0.4)" : "rgba(139, 92, 246, 0.3)"}
-                          strokeWidth="1.5"/>
-                        <text x="450" y="525" textAnchor="middle"
-                          fill={isDarkMode ? "#fff" : "#1f2937"} fontSize="12" fontWeight="bold">Example: Swap Transaction</text>
-                        <text x="220" y="550" textAnchor="start"
-                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">swap(currencyA, currencyB, amount, priceA, priceB)</text>
-                        <text x="220" y="570" textAnchor="start"
-                          fill={isDarkMode ? "#a1a1aa" : "#6b7280"} fontSize="10">• priceA and priceB are fetched off-chain and passed as parameters</text>
-                        
-                        {/* Arrow marker */}
+                        {/* Arrow markers */}
                         <defs>
-                          <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
-                            <polygon points="0 0, 10 3, 0 6" 
-                              fill={isDarkMode ? "rgba(139, 92, 246, 0.7)" : "rgba(139, 92, 246, 0.5)"}/>
+                          <marker id="arrowhead-large" markerWidth="12" markerHeight="12" refX="11" refY="4" orient="auto">
+                            <polygon points="0 0, 12 4, 0 8" 
+                              fill={isDarkMode ? "rgba(139, 92, 246, 0.8)" : "rgba(139, 92, 246, 0.6)"}/>
                           </marker>
                         </defs>
                       </svg>
@@ -2736,13 +2762,73 @@ export default function Whitepaper() {
 
                 <div>
                   <h3 className={subHeadingClass()}>Future Development</h3>
-                  <ul className="text-zinc-300 space-y-2">
-                    <li>• Additional regional stablecoins</li>
-                    <li>• Enhanced yield strategies</li>
-                    <li>• Governance mechanisms</li>
-                    <li>• Advanced analytics dashboard</li>
-                    <li>• Mobile application</li>
-                  </ul>
+                  
+                  <div className="space-y-6">
+                    <div>
+                      <h4 className={cn(
+                        "text-lg font-semibold mb-3",
+                        isDarkMode ? "text-white" : "text-gray-900"
+                      )}>1. Additional Regional Stablecoins</h4>
+                      <p className={textClass()}>
+                        Expand support to more regional currencies to increase global accessibility and liquidity.
+                      </p>
+                      <ul className={listTextClass()}>
+                        <li>• <strong className={strongClass()}>Target Currencies:</strong> JPYX (Japanese Yen), GBPX (British Pound), AUDX (Australian Dollar), CADX (Canadian Dollar), and more</li>
+                        <li>• <strong className={strongClass()}>Enhanced Multi-Currency Pools:</strong> Support for 10+ regional stablecoins in unified liquidity pool</li>
+                        <li>• <strong className={strongClass()}>Regional Market Features:</strong> Currency-specific features tailored to local market needs</li>
+                        <li>• <strong className={strongClass()}>Regulatory Compliance:</strong> Ensure each currency meets regional regulatory requirements</li>
+                      </ul>
+                    </div>
+
+                    <div>
+                      <h4 className={cn(
+                        "text-lg font-semibold mb-3",
+                        isDarkMode ? "text-white" : "text-gray-900"
+                      )}>2. Enhanced Yield Strategies</h4>
+                      <p className={textClass()}>
+                        Implement automated yield generation across multiple DeFi protocols.
+                      </p>
+                      <ul className={listTextClass()}>
+                        <li>• <strong className={strongClass()}>Automated Yield Farming:</strong> Integrate with lending protocols, DEXs, and yield aggregators</li>
+                        <li>• <strong className={strongClass()}>Multi-Strategy Vault:</strong> Allocate funds across multiple strategies based on risk/return profiles</li>
+                        <li>• <strong className={strongClass()}>Auto-Compounding:</strong> Automatically reinvest yields to maximize returns</li>
+                        <li>• <strong className={strongClass()}>Strategy Performance Tracking:</strong> Real-time APY tracking per strategy with historical analytics</li>
+                        <li>• <strong className={strongClass()}>Risk Management:</strong> Slippage controls, impermanent loss protection, and strategy rebalancing</li>
+                      </ul>
+                    </div>
+
+                    <div>
+                      <h4 className={cn(
+                        "text-lg font-semibold mb-3",
+                        isDarkMode ? "text-white" : "text-gray-900"
+                      )}>3. Payment/Offramp Protocol Integration</h4>
+                      <p className={textClass()}>
+                        Enable real-world usage through partnerships with payment processors and offramp services.
+                      </p>
+                      <ul className={listTextClass()}>
+                        <li>• <strong className={strongClass()}>Merchant Acceptance:</strong> Enable businesses to accept regional stablecoins as payment</li>
+                        <li>• <strong className={strongClass()}>Point-of-Sale Integration:</strong> Connect with payment terminals and e-commerce platforms</li>
+                        <li>• <strong className={strongClass()}>Fiat Conversion:</strong> Convert SBX and regional stablecoins to local fiat currencies</li>
+                        <li>• <strong className={strongClass()}>Bank Transfers:</strong> Direct bank account integration for withdrawals</li>
+                        <li>• <strong className={strongClass()}>Card Issuance:</strong> Debit/credit cards linked to SBX balances</li>
+                        <li>• <strong className={strongClass()}>Cross-Border Payments:</strong> Low-cost international remittances</li>
+                        <li>• <strong className={strongClass()}>Corporate Treasury:</strong> B2B payment solutions for businesses</li>
+                      </ul>
+                    </div>
+
+                    <div>
+                      <h4 className={cn(
+                        "text-lg font-semibold mb-3",
+                        isDarkMode ? "text-white" : "text-gray-900"
+                      )}>4. Additional Enhancements</h4>
+                      <ul className={listTextClass()}>
+                        <li>• Governance mechanisms</li>
+                        <li>• Advanced analytics dashboard</li>
+                        <li>• Mobile application</li>
+                        <li>• Enhanced security audits and monitoring</li>
+                      </ul>
+                    </div>
+                  </div>
                 </div>
               </div>
             </section>
