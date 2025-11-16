@@ -759,6 +759,24 @@ export default function StakePage() {
         throw new Error('Account object is required. Failed to create account.');
       }
 
+      // Check if user has IOTA coins for gas
+      const iotaCoins = await client.getCoins({
+        owner: currentAccount.address,
+        coinType: '0x2::iota::IOTA',
+      });
+
+      const iotaBalance = (iotaCoins.data || []).reduce(
+        (sum, coin) => sum + BigInt(coin.balance || 0),
+        BigInt(0)
+      );
+
+      if (iotaBalance === BigInt(0)) {
+        throw new Error(
+          'Insufficient IOTA for gas fees. Please ensure you have IOTA coins in your wallet to pay for transaction fees. ' +
+          'You can request testnet IOTA from the faucet or bridge some IOTA to your wallet.'
+        );
+      }
+
       // Build transaction based on currency
       const txb = new Transaction();
 
@@ -908,10 +926,12 @@ export default function StakePage() {
           if (coinBalance === amountMicroBigInt) {
             // Exact amount - use whole coin
             usdcCoin = firstCoin;
-          } else {
+          } else if (coinBalance > amountMicroBigInt) {
             // Split to get exact amount
             txb.splitCoins(firstCoin, [amountMicroBigInt]);
             usdcCoin = { $kind: 'NestedResult' as const, NestedResult: [0, 0] };
+          } else {
+            throw new Error(`Coin balance (${coinBalance}) is less than required amount (${amountMicroBigInt})`);
           }
         } else {
           // Multiple coins - merge all into first coin, then split to exact amount
@@ -919,11 +939,13 @@ export default function StakePage() {
           const primaryCoin = coinRefs[0];
           
           // Merge all other coins into the primary coin
+          // Each merge is a separate command, so the split will be at index = number of merges
           for (let i = 1; i < coinRefs.length; i++) {
             txb.mergeCoins(primaryCoin, [coinRefs[i]]);
           }
           
           // Split to get exact amount
+          // The split command index is the number of merge commands (coinRefs.length - 1)
           const splitCommandIndex = coinRefs.length - 1;
           const amountMicroBigInt = BigInt(amountMicro);
           txb.splitCoins(primaryCoin, [amountMicroBigInt]);
@@ -948,16 +970,34 @@ export default function StakePage() {
         // Split coins and pass the Coin object directly to the function
         const firstCoin = txb.object(coinObjects[0]);
         let coinRef: any;
+        const amountMicroBigInt = BigInt(amountMicro);
         
-        if (coinObjects.length === 1 && amountsToSplit[0] === BigInt(coins.data.find(c => c.coinObjectId === coinObjects[0])?.balance || 0)) {
-          // Using the whole coin - pass it directly
-          coinRef = firstCoin;
+        if (coinObjects.length === 1) {
+          const coinBalance = BigInt(coins.data.find(c => c.coinObjectId === coinObjects[0])?.balance || 0);
+          if (coinBalance === amountMicroBigInt) {
+            // Using the whole coin - pass it directly
+            coinRef = firstCoin;
+          } else if (coinBalance > amountMicroBigInt) {
+            // Split the exact amount needed
+            txb.splitCoins(firstCoin, [amountMicroBigInt]);
+            coinRef = { $kind: 'NestedResult' as const, NestedResult: [0, 0] };
+          } else {
+            throw new Error(`Coin balance (${coinBalance}) is less than required amount (${amountMicroBigInt})`);
+          }
         } else {
-          // Split the exact amount needed
-          // splitCoins is the first actual command (object() and sharedObjectRef() are just references, not commands)
-          // So splitCoins will be at index 0
-          txb.splitCoins(firstCoin, [BigInt(amountMicro)]);
-          coinRef = { $kind: 'NestedResult' as const, NestedResult: [0, 0] };
+          // Multiple coins - merge all into first coin, then split to exact amount
+          const coinRefs = coinObjects.map(id => txb.object(id));
+          const primaryCoin = coinRefs[0];
+          
+          // Merge all other coins into the primary coin
+          for (let i = 1; i < coinRefs.length; i++) {
+            txb.mergeCoins(primaryCoin, [coinRefs[i]]);
+          }
+          
+          // Split to get exact amount
+          const splitCommandIndex = coinRefs.length - 1;
+          txb.splitCoins(primaryCoin, [amountMicroBigInt]);
+          coinRef = { $kind: 'NestedResult' as const, NestedResult: [splitCommandIndex, 0] };
         }
         
         const priceMu = Math.floor(currencyPrice * 1_000_000);
@@ -977,14 +1017,32 @@ export default function StakePage() {
         // Stake TRYB - contract expects Coin<TRYB> as argument
         const firstCoin = txb.object(coinObjects[0]);
         let coinRef: any;
+        const amountMicroBigInt = BigInt(amountMicro);
         
-        if (coinObjects.length === 1 && amountsToSplit[0] === BigInt(coins.data.find(c => c.coinObjectId === coinObjects[0])?.balance || 0)) {
-          coinRef = firstCoin;
+        if (coinObjects.length === 1) {
+          const coinBalance = BigInt(coins.data.find(c => c.coinObjectId === coinObjects[0])?.balance || 0);
+          if (coinBalance === amountMicroBigInt) {
+            coinRef = firstCoin;
+          } else if (coinBalance > amountMicroBigInt) {
+            txb.splitCoins(firstCoin, [amountMicroBigInt]);
+            coinRef = { $kind: 'NestedResult' as const, NestedResult: [0, 0] };
+          } else {
+            throw new Error(`Coin balance (${coinBalance}) is less than required amount (${amountMicroBigInt})`);
+          }
         } else {
-          // splitCoins is the first actual command (object() and sharedObjectRef() are just references, not commands)
-          // So splitCoins will be at index 0
-          txb.splitCoins(firstCoin, [BigInt(amountMicro)]);
-          coinRef = { $kind: 'NestedResult' as const, NestedResult: [0, 0] };
+          // Multiple coins - merge all into first coin, then split to exact amount
+          const coinRefs = coinObjects.map(id => txb.object(id));
+          const primaryCoin = coinRefs[0];
+          
+          // Merge all other coins into the primary coin
+          for (let i = 1; i < coinRefs.length; i++) {
+            txb.mergeCoins(primaryCoin, [coinRefs[i]]);
+          }
+          
+          // Split to get exact amount
+          const splitCommandIndex = coinRefs.length - 1;
+          txb.splitCoins(primaryCoin, [amountMicroBigInt]);
+          coinRef = { $kind: 'NestedResult' as const, NestedResult: [splitCommandIndex, 0] };
         }
         
         const priceMu = Math.floor(currencyPrice * 1_000_000);
@@ -1004,14 +1062,32 @@ export default function StakePage() {
         // Stake SEKX - contract expects Coin<SEKX> as argument
         const firstCoin = txb.object(coinObjects[0]);
         let coinRef: any;
+        const amountMicroBigInt = BigInt(amountMicro);
         
-        if (coinObjects.length === 1 && amountsToSplit[0] === BigInt(coins.data.find(c => c.coinObjectId === coinObjects[0])?.balance || 0)) {
-          coinRef = firstCoin;
+        if (coinObjects.length === 1) {
+          const coinBalance = BigInt(coins.data.find(c => c.coinObjectId === coinObjects[0])?.balance || 0);
+          if (coinBalance === amountMicroBigInt) {
+            coinRef = firstCoin;
+          } else if (coinBalance > amountMicroBigInt) {
+            txb.splitCoins(firstCoin, [amountMicroBigInt]);
+            coinRef = { $kind: 'NestedResult' as const, NestedResult: [0, 0] };
+          } else {
+            throw new Error(`Coin balance (${coinBalance}) is less than required amount (${amountMicroBigInt})`);
+          }
         } else {
-          // splitCoins is the first actual command (object() and sharedObjectRef() are just references, not commands)
-          // So splitCoins will be at index 0
-          txb.splitCoins(firstCoin, [BigInt(amountMicro)]);
-          coinRef = { $kind: 'NestedResult' as const, NestedResult: [0, 0] };
+          // Multiple coins - merge all into first coin, then split to exact amount
+          const coinRefs = coinObjects.map(id => txb.object(id));
+          const primaryCoin = coinRefs[0];
+          
+          // Merge all other coins into the primary coin
+          for (let i = 1; i < coinRefs.length; i++) {
+            txb.mergeCoins(primaryCoin, [coinRefs[i]]);
+          }
+          
+          // Split to get exact amount
+          const splitCommandIndex = coinRefs.length - 1;
+          txb.splitCoins(primaryCoin, [amountMicroBigInt]);
+          coinRef = { $kind: 'NestedResult' as const, NestedResult: [splitCommandIndex, 0] };
         }
         
         const priceMu = Math.floor(currencyPrice * 1_000_000);
