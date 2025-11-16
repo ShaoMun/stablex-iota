@@ -17,6 +17,8 @@ export default function DualWalletButton({ isDarkMode = true }: DualWalletButton
   const [isIOTADropdownOpen, setIsIOTADropdownOpen] = useState(false);
   const [isEVMDropdownOpen, setIsEVMDropdownOpen] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [isRequestingFunds, setIsRequestingFunds] = useState(false);
+  const [requestFundsResult, setRequestFundsResult] = useState<{ show: boolean; results?: any[]; error?: string; notice?: string }>({ show: false });
   const iotaDropdownRef = useRef<HTMLDivElement>(null);
   const iotaButtonRef = useRef<HTMLButtonElement>(null);
   const evmDropdownRef = useRef<HTMLDivElement>(null);
@@ -40,6 +42,52 @@ export default function DualWalletButton({ isDarkMode = true }: DualWalletButton
       setTimeout(() => setCopiedField(null), 2000);
     } catch (err) {
       console.error("Failed to copy:", err);
+    }
+  };
+
+  const handleRequestFunds = async () => {
+    // Check if IOTA wallet is connected
+    if (!iotaAccount) {
+      setIsIOTAModalOpen(true);
+      return;
+    }
+
+    setIsRequestingFunds(true);
+    setRequestFundsResult({ show: false });
+
+    try {
+      const response = await fetch('/api/request-funds', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          recipientAddress: iotaAccount.address,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setRequestFundsResult({ show: true, results: data.results, notice: data.notice });
+        // Auto-hide after 10 seconds
+        setTimeout(() => {
+          setRequestFundsResult({ show: false });
+        }, 10000);
+      } else {
+        setRequestFundsResult({ show: true, error: data.error || data.message || 'Failed to request funds' });
+        setTimeout(() => {
+          setRequestFundsResult({ show: false });
+        }, 10000);
+      }
+    } catch (error: any) {
+      console.error('Error requesting funds:', error);
+      setRequestFundsResult({ show: true, error: error.message || 'Failed to request funds' });
+      setTimeout(() => {
+        setRequestFundsResult({ show: false });
+      }, 10000);
+    } finally {
+      setIsRequestingFunds(false);
     }
   };
 
@@ -75,6 +123,91 @@ export default function DualWalletButton({ isDarkMode = true }: DualWalletButton
 
   return (
     <div className="flex items-center gap-3">
+      {/* Request Funds Button */}
+      <button
+        onClick={handleRequestFunds}
+        disabled={isRequestingFunds}
+        className={cn(
+          "relative px-4 py-2.5 text-sm font-medium rounded-lg overflow-hidden group transition-all duration-300 ease-out hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed",
+          isDarkMode ? "text-white" : "text-gray-900"
+        )}
+        style={isDarkMode ? {
+          background: 'linear-gradient(135deg, rgba(34, 197, 94, 0.2) 0%, rgba(34, 197, 94, 0.1) 50%, rgba(34, 197, 94, 0.15) 100%)',
+          border: '1px solid rgba(34, 197, 94, 0.3)',
+          boxShadow: '0 4px 15px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2), inset 0 -1px 0 rgba(0, 0, 0, 0.2)',
+          backdropFilter: 'blur(12px)',
+        } : {
+          background: 'linear-gradient(135deg, rgba(34, 197, 94, 0.9) 0%, rgba(34, 197, 94, 0.7) 50%, rgba(34, 197, 94, 0.8) 100%)',
+          border: '1px solid rgba(34, 197, 94, 0.3)',
+          boxShadow: '0 4px 15px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.8), inset 0 -1px 0 rgba(0, 0, 0, 0.05)',
+          backdropFilter: 'blur(12px)',
+        }}
+      >
+        <span className="relative z-10 tracking-wider font-mono font-semibold text-xs uppercase">
+          {isRequestingFunds ? 'REQUESTING...' : 'REQUEST FUNDS'}
+        </span>
+      </button>
+
+      {/* Request Funds Result Snackbar */}
+      {requestFundsResult.show && (
+        <div
+          className="fixed bottom-4 right-4 z-50 rounded-xl overflow-hidden backdrop-blur-xl max-w-md"
+          style={isDarkMode ? {
+            background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.15) 0%, rgba(200, 200, 200, 0.1) 50%, rgba(255, 255, 255, 0.15) 100%), rgba(255, 255, 255, 0.05)',
+            border: '1px solid rgba(255, 255, 255, 0.4)',
+            boxShadow: '0 8px 30px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.3), inset 0 -1px 0 rgba(0, 0, 0, 0.2)',
+          } : {
+            background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.9) 50%, rgba(255, 255, 255, 0.95) 100%)',
+            border: '1px solid rgba(0, 0, 0, 0.1)',
+            boxShadow: '0 8px 30px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.9), inset 0 -1px 0 rgba(0, 0, 0, 0.05)',
+          }}
+        >
+          <div className="p-4">
+            {requestFundsResult.error ? (
+              <div>
+                <p className={cn("font-semibold text-sm mb-2", isDarkMode ? "text-red-400" : "text-red-600")}>
+                  Error
+                </p>
+                <p className={cn("text-sm", isDarkMode ? "text-white" : "text-gray-900")}>
+                  {requestFundsResult.error}
+                </p>
+              </div>
+            ) : requestFundsResult.results ? (
+              <div>
+                <p className={cn("font-semibold text-sm mb-2", isDarkMode ? "text-green-400" : "text-green-600")}>
+                  Funds Requested
+                </p>
+                <div className="space-y-1">
+                  {requestFundsResult.results.map((result, idx) => (
+                    <div key={idx} className="flex items-center justify-between text-xs">
+                      <span className={cn(isDarkMode ? "text-white" : "text-gray-900")}>
+                        {result.type}:
+                      </span>
+                      {result.success ? (
+                        <span className={cn("font-mono", isDarkMode ? "text-green-400" : "text-green-600")}>
+                          ✓ {result.digest?.slice(0, 8)}...
+                        </span>
+                      ) : (
+                        <span className={cn("font-mono", isDarkMode ? "text-red-400" : "text-red-600")}>
+                          ✗ {result.error}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                {requestFundsResult.notice && (
+                  <div className={cn("mt-3 pt-3 border-t", isDarkMode ? "border-white/10" : "border-gray-200")}>
+                    <p className={cn("text-xs", isDarkMode ? "text-zinc-400" : "text-gray-500")}>
+                      {requestFundsResult.notice}
+                    </p>
+                  </div>
+                )}
+              </div>
+            ) : null}
+          </div>
+        </div>
+      )}
+
       {/* IOTA Wallet Button */}
       <div className="relative">
         {iotaAccount ? (
